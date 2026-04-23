@@ -1,0 +1,99 @@
+<div class="monitor-container">
+  <div class="tui-toolbar">
+    <div class="tui-toolbar-left">
+      <span class="tui-toolbar-title" style="font-size:16px;font-weight:600">System Monitor</span>
+    </div>
+    <div class="tui-toolbar-right">
+      <div class="tui-status" id="monitor-status">
+        <span class="tui-status-dot pulse"></span>
+        <span class="status-text">Refreshing...</span>
+      </div>
+    </div>
+  </div>
+  <div class="monitor-content tui-scrollbar">
+    <div class="monitor-grid">
+      <div class="tui-card">
+        <div class="tui-card-header">
+          <div class="tui-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <rect x="4" y="4" width="16" height="16" rx="2"/>
+              <rect x="9" y="9" width="6" height="6"/>
+              <line x1="9" y1="1" x2="9" y2="4"/><line x1="15" y1="1" x2="15" y2="4"/>
+              <line x1="9" y1="20" x2="9" y2="23"/><line x1="15" y1="20" x2="15" y2="23"/>
+              <line x1="20" y1="9" x2="23" y2="9"/><line x1="20" y1="14" x2="23" y2="14"/>
+              <line x1="1" y1="9" x2="4" y2="9"/><line x1="1" y1="14" x2="4" y2="14"/>
+            </svg>
+          </div>
+          <div class="tui-card-title">CPU Usage</div>
+        </div>
+        <div class="tui-card-body">
+          <div class="monitor-value" id="cpu-value">--</div>
+          <div class="tui-progress">
+            <div class="tui-progress-fill" id="cpu-bar" style="width: 0%"></div>
+          </div>
+          <div class="tui-text-sm tui-text-tertiary" id="cpu-cores">-- cores</div>
+        </div>
+      </div>
+
+      <div class="tui-card">
+        <div class="tui-card-header">
+          <div class="tui-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/>
+              <polyline points="3.27 6.96 12 12.01 20.73 6.96"/>
+              <line x1="12" y1="22.08" x2="12" y2="12"/>
+            </svg>
+          </div>
+          <div class="tui-card-title">Memory</div>
+        </div>
+        <div class="tui-card-body">
+          <div class="monitor-value" id="memory-value">--</div>
+          <div class="tui-progress">
+            <div class="tui-progress-fill" id="memory-bar" style="width: 0%"></div>
+          </div>
+          <div class="tui-text-sm tui-text-tertiary" id="memory-total">-- / --</div>
+        </div>
+      </div>
+
+      <div class="tui-card">
+        <div class="tui-card-header">
+          <div class="tui-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 12h-4l-3 9L9 3l-3 9H2"/>
+            </svg>
+          </div>
+          <div class="tui-card-title">Load Average</div>
+        </div>
+        <div class="tui-card-body">
+          <div class="monitor-load" id="load-avg">--</div>
+          <div class="tui-text-sm tui-text-tertiary">1min / 5min / 15min</div>
+        </div>
+      </div>
+
+      <div class="tui-card">
+        <div class="tui-card-header">
+          <div class="tui-card-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/>
+              <polyline points="17 8 12 3 7 8"/>
+              <line x1="12" y1="3" x2="12" y2="15"/>
+            </svg>
+          </div>
+          <div class="tui-card-title">Disk</div>
+        </div>
+        <div class="tui-card-body">
+          <div class="monitor-value" id="disk-value">--</div>
+          <div class="tui-progress">
+            <div class="tui-progress-fill" id="disk-bar" style="width: 0%"></div>
+          </div>
+          <div class="tui-text-sm tui-text-tertiary" id="disk-mount">/</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="monitor-info">
+      <p class="monitor-info-text">System metrics update every 5 seconds</p>
+      <p class="monitor-info-detail">Connected to: <span id="connected-host">--</span></p>
+    </div>
+  </div>
+</div>

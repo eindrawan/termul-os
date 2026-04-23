@@ -1,0 +1,13 @@
+{
+  "name": "Terminal",
+  "description": "SSH terminal emulator",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "terminal",
+  "system": true,
+  "window": {
+    "width": 900,
+    "height": 600
+  },
+  "permissions": ["ssh", "connection"]
+}

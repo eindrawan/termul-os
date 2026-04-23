@@ -1,0 +1,22 @@
+<svg width="256" height="256" viewBox="0 0 256 256" fill="none" xmlns="http://www.w3.org/2000/svg">
+  <!-- Background gradient -->
+  <defs>
+    <linearGradient id="bg-gradient" x1="0" y1="0" x2="256" y2="256" gradientUnits="userSpaceOnUse">
+      <stop offset="0%" stop-color="#0067C0"/>
+      <stop offset="100%" stop-color="#60CDFF"/>
+    </linearGradient>
+  </defs>
+  
+  <!-- Background rounded rect -->
+  <rect width="256" height="256" rx="48" fill="url(#bg-gradient)"/>
+  
+  <!-- Grid of 4 squares (Windows 12 style) -->
+  <rect x="40" y="40" width="80" height="80" rx="16" fill="white" opacity="0.95"/>
+  <rect x="136" y="40" width="80" height="80" rx="16" fill="white" opacity="0.9"/>
+  <rect x="40" y="136" width="80" height="80" rx="16" fill="white" opacity="0.9"/>
+  <rect x="136" y="136" width="80" height="80" rx="16" fill="white" opacity="0.95"/>
+  
+  <!-- Terminal prompt symbol -->
+  <path d="M60 60 L90 90 L60 120" stroke="#0067C0" stroke-width="6" stroke-linecap="round" stroke-linejoin="round" fill="none"/>
+  <line x1="100" y1="120" x2="140" y2="120" stroke="#0067C0" stroke-width="6" stroke-linecap="round"/>
+</svg>

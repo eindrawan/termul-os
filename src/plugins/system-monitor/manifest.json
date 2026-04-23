@@ -1,0 +1,13 @@
+{
+  "name": "System Monitor",
+  "description": "Monitor system resources",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "system-monitor",
+  "system": true,
+  "window": {
+    "width": 600,
+    "height": 450
+  },
+  "permissions": ["ssh"]
+}

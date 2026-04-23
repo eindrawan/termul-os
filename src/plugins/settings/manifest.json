@@ -1,0 +1,13 @@
+{
+  "name": "Settings",
+  "description": "System settings and configuration",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "settings",
+  "system": true,
+  "window": {
+    "width": 700,
+    "height": 500
+  },
+  "permissions": []
+}

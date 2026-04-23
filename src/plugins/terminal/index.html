@@ -1,0 +1,24 @@
+<div class="terminal-container">
+  <div class="tui-toolbar">
+    <div class="tui-toolbar-left">
+      <span class="tui-toolbar-title terminal-profile-name">{{profileName}}</span>
+      <span class="tui-status" id="terminal-status">
+        <span class="tui-status-dot connected"></span>
+        <span class="status-text">Connecting...</span>
+      </span>
+    </div>
+    <div class="tui-toolbar-right">
+      <button class="tui-btn-icon" id="terminal-clear" title="Clear">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+        </svg>
+      </button>
+      <button class="tui-btn-icon" id="terminal-disconnect" title="Disconnect">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M18.36 6.64a9 9 0 1 1-12.73 0M12 2v10"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+  <div class="terminal-body" id="terminal-xterm"></div>
+</div>
