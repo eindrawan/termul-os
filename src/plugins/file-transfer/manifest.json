@@ -1,0 +1,13 @@
+{
+  "name": "File Transfer",
+  "description": "Dual-pane SFTP file manager — upload and download files between local and remote",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "file-transfer",
+  "system": true,
+  "window": {
+    "width": 1000,
+    "height": 650
+  },
+  "permissions": ["ssh"]
+}

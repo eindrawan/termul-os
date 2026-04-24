@@ -1,4 +1,4 @@
-const { app, BrowserWindow, ipcMain, dialog } = require('electron');
+const { app, BrowserWindow, ipcMain, dialog, protocol, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
 const { Client } = require('ssh2');
@@ -8,6 +8,19 @@ const SRC_DIR = path.join(__dirname, '..', 'src');
 const PLUGINS_DIR = path.join(SRC_DIR, 'plugins');
 const USER_DATA = app.getPath('userData');
 const PROFILES_FILE = path.join(USER_DATA, 'profiles.json');
+
+// ─── Monaco Editor custom protocol ─────────────────────────────────
+// Must be registered BEFORE app.whenReady()
+protocol.registerSchemesAsPrivileged([{
+  scheme: 'monaco',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    bypassCSP: true,
+  }
+}]);
 
 // ─── State ───────────────────────────────────────────────────────────
 let mainWindow = null;
@@ -94,6 +107,13 @@ function createMainWindow() {
     mainWindow.show();
   });
 
+  // Fix: frameless transparent windows on Windows extend behind the taskbar
+  // when maximized. Reduce height by 8px to keep the taskbar visible.
+  mainWindow.on('maximize', () => {
+    const { width } = mainWindow.getBounds();
+    mainWindow.setSize(width, screen.getPrimaryDisplay().workAreaSize.height - 8);
+  });
+
   mainWindow.on('closed', () => {
     // Close all SSH connections
     for (const [id, conn] of sshConnections) {
@@ -107,6 +127,32 @@ function createMainWindow() {
 // ─── App Lifecycle ───────────────────────────────────────────────────
 app.whenReady().then(() => {
   ensureDataFiles();
+
+  // Register monaco:// protocol to serve Monaco Editor files from node_modules
+  // Base URL format: monaco://resources/vs/ — "resources" is a dummy host
+  // All paths resolve to: node_modules/monaco-editor/min/vs/<path>
+  const MONACO_VS_DIR = path.join(__dirname, '..', 'node_modules', 'monaco-editor', 'min', 'vs');
+  protocol.registerFileProtocol('monaco', (request, callback) => {
+    try {
+      const url = new URL(request.url);
+      // url.pathname is like "/vs/loader.js" or "/vs/editor/editor.main.js"
+      let relativePath = url.pathname;
+      // Remove leading slash
+      if (relativePath.startsWith('/')) {
+        relativePath = relativePath.substring(1);
+      }
+      // Remove "vs/" prefix since MONACO_VS_DIR already includes it
+      if (relativePath.startsWith('vs/')) {
+        relativePath = relativePath.substring(3);
+      }
+      const filePath = path.join(MONACO_VS_DIR, relativePath);
+      callback({ path: filePath });
+    } catch (e) {
+      console.error('[monaco protocol] Error parsing URL:', request.url, e);
+      callback({ error: -2 }); // net::FAILED
+    }
+  });
+
   createMainWindow();
 
   app.on('activate', () => {
@@ -213,11 +259,31 @@ ipcMain.handle('ssh:connect', (event, profile) => {
     });
 
     conn.on('error', (err) => {
-      reject({ success: false, error: err.message });
+      // If the connection was already established, this is a runtime error
+      // (e.g. connection lost). Notify the renderer.
+      if (sshConnections.has(connId)) {
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ssh:connection-error', {
+            connectionId: connId,
+            error: err.message
+          });
+        }
+        sshConnections.delete(connId);
+      } else {
+        reject({ success: false, error: err.message });
+      }
     });
 
     conn.on('close', () => {
+      const wasConnected = sshConnections.has(connId);
       sshConnections.delete(connId);
+
+      // Notify the renderer if this was an established connection that closed
+      if (wasConnected && mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('ssh:connection-closed', {
+          connectionId: connId
+        });
+      }
     });
 
     conn.connect(sshConfig);
@@ -531,6 +597,564 @@ ipcMain.handle('ui:getSharedCSS', () => {
     return '';
   } catch {
     return '';
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// IPC: SFTP (SSH File Transfer)
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * List remote directory via SFTP.
+ * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
+ */
+ipcMain.handle('ssh:sftpListDir', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+
+      sftp.readdir(remotePath, (err, list) => {
+        if (err) {
+          resolve({ success: false, error: err.message });
+          return;
+        }
+
+        const entries = list.map(item => ({
+          name: item.filename,
+          size: item.attrs.size || 0,
+          modifyTime: item.attrs.mtime ? item.attrs.mtime * 1000 : null,
+          isDirectory: (item.attrs.mode & 0o40000) !== 0,
+          isFile: (item.attrs.mode & 0o100000) !== 0,
+          isSymlink: (item.attrs.mode & 0o120000) !== 0,
+          path: remotePath === '/' ? '/' + item.filename : remotePath + '/' + item.filename,
+        }));
+
+        // Sort: directories first, then alphabetical
+        entries.sort((a, b) => {
+          if (a.isDirectory && !b.isDirectory) return -1;
+          if (!a.isDirectory && b.isDirectory) return 1;
+          return a.name.localeCompare(b.name);
+        });
+
+        resolve({ success: true, entries });
+      });
+    });
+  });
+});
+
+/**
+ * Get remote file/directory stats via SFTP.
+ */
+ipcMain.handle('ssh:sftpStat', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+      sftp.stat(remotePath, (err, stats) => {
+        if (err) {
+          resolve({ success: false, error: err.message });
+          return;
+        }
+        resolve({
+          success: true,
+          stat: {
+            size: stats.size || 0,
+            modifyTime: stats.mtime ? stats.mtime * 1000 : null,
+            isDirectory: stats.isDirectory(),
+            isFile: stats.isFile(),
+          }
+        });
+      });
+    });
+  });
+});
+
+/**
+ * Download a remote file to a local path via SFTP.
+ * Reports progress via IPC events.
+ */
+ipcMain.handle('ssh:sftpDownload', (event, connectionId, remotePath, localPath, transferId) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    conn.sftp((err, sftp) => {
+      if (err) {
+        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
+        return;
+      }
+
+      // Get remote file size first for progress
+      sftp.stat(remotePath, (statErr, stats) => {
+        if (statErr) {
+          if (!resolved) { resolved = true; resolve({ success: false, error: statErr.message }); }
+          return;
+        }
+
+        const totalSize = stats.size;
+        let transferred = 0;
+
+        const readStream = sftp.createReadStream(remotePath);
+        const writeStream = fs.createWriteStream(localPath);
+
+        readStream.on('data', (chunk) => {
+          transferred += chunk.length;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send('ssh:sftp-progress', {
+              transferId,
+              transferred,
+              total: totalSize,
+              percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
+            });
+          }
+        });
+
+        readStream.on('error', (err) => {
+          writeStream.destroy();
+          if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
+        });
+
+        writeStream.on('error', (err) => {
+          readStream.destroy();
+          if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
+        });
+
+        writeStream.on('finish', () => {
+          if (!resolved) { resolved = true; resolve({ success: true, transferred }); }
+        });
+
+        readStream.pipe(writeStream);
+      });
+    });
+  });
+});
+
+/**
+ * Upload a local file to a remote path via SFTP.
+ * Reports progress via IPC events.
+ */
+ipcMain.handle('ssh:sftpUpload', (event, connectionId, localPath, remotePath, transferId) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  if (!fs.existsSync(localPath)) {
+    return { success: false, error: 'Local file not found' };
+  }
+
+  return new Promise((resolve) => {
+    let resolved = false;
+    const totalSize = fs.statSync(localPath).size;
+    let transferred = 0;
+
+    conn.sftp((err, sftp) => {
+      if (err) {
+        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
+        return;
+      }
+
+      const readStream = fs.createReadStream(localPath);
+      const writeStream = sftp.createWriteStream(remotePath);
+
+      readStream.on('data', (chunk) => {
+        transferred += chunk.length;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ssh:sftp-progress', {
+            transferId,
+            transferred,
+            total: totalSize,
+            percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
+          });
+        }
+      });
+
+      readStream.on('error', (err) => {
+        writeStream.end();
+        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
+      });
+
+      writeStream.on('error', (err) => {
+        readStream.destroy();
+        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
+      });
+
+      writeStream.on('close', () => {
+        if (!resolved) { resolved = true; resolve({ success: true, transferred }); }
+      });
+
+      readStream.pipe(writeStream);
+    });
+  });
+});
+
+/**
+ * Create a remote directory via SFTP.
+ */
+ipcMain.handle('ssh:sftpMkdir', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+      sftp.mkdir(remotePath, (err) => {
+        if (err) {
+          resolve({ success: false, error: err.message });
+        } else {
+          resolve({ success: true });
+        }
+      });
+    });
+  });
+});
+
+/**
+ * Delete a remote file via SFTP.
+ */
+ipcMain.handle('ssh:sftpDelete', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+      sftp.unlink(remotePath, (err) => {
+        if (err) {
+          resolve({ success: false, error: err.message });
+        } else {
+          resolve({ success: true });
+        }
+      });
+    });
+  });
+});
+
+/**
+ * Remove a remote directory via SFTP.
+ */
+ipcMain.handle('ssh:sftpRmdir', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+      sftp.rmdir(remotePath, (err) => {
+        if (err) {
+          resolve({ success: false, error: err.message });
+        } else {
+          resolve({ success: true });
+        }
+      });
+    });
+  });
+});
+
+/**
+ * Rename a remote file/directory via SFTP.
+ */
+ipcMain.handle('ssh:sftpRename', (event, connectionId, oldPath, newPath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+      sftp.rename(oldPath, newPath, (err) => {
+        if (err) {
+          resolve({ success: false, error: err.message });
+        } else {
+          resolve({ success: true });
+        }
+      });
+    });
+  });
+});
+
+/**
+ * Resolve remote home directory via SSH command.
+ */
+ipcMain.handle('ssh:sftpHome', (event, connectionId) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.exec('echo ~', (err, stream) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+      let output = '';
+      stream.on('data', (data) => { output += data.toString(); });
+      stream.stderr.on('data', (data) => {});
+      stream.on('close', () => {
+        resolve({ success: true, path: output.trim() || '/' });
+      });
+    });
+  });
+});
+
+/**
+ * Execute an arbitrary command over SSH.
+ * Returns { success, stdout, stderr, exitCode }
+ */
+ipcMain.handle('ssh:exec', (event, connectionId, command) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.exec(command, (err, stream) => {
+      if (err) {
+        resolve({ success: false, error: err.message, stdout: '', stderr: err.message, exitCode: -1 });
+        return;
+      }
+      let stdout = '';
+      let stderr = '';
+      let exitCode = 0;
+
+      stream.on('data', (data) => { stdout += data.toString(); });
+      stream.stderr.on('data', (data) => { stderr += data.toString(); });
+      stream.on('close', (code) => {
+        exitCode = code || 0;
+        resolve({
+          success: exitCode === 0,
+          stdout: stdout.trim(),
+          stderr: stderr.trim(),
+          exitCode: exitCode,
+          error: exitCode !== 0 ? stderr.trim() || 'Command failed (exit ' + exitCode + ')' : null,
+        });
+      });
+    });
+  });
+});
+
+/**
+ * Read a remote file's text content via SFTP.
+ * Returns { success, content } or { success: false, error }
+ */
+ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+
+      const chunks = [];
+      const readStream = sftp.createReadStream(remotePath);
+
+      readStream.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+
+      readStream.on('error', (readErr) => {
+        resolve({ success: false, error: readErr.message });
+      });
+
+      readStream.on('close', () => {
+        const content = Buffer.concat(chunks).toString('utf-8');
+        resolve({ success: true, content: content });
+      });
+    });
+  });
+});
+
+/**
+ * Write text content to a remote file via SFTP.
+ * Returns { success: true } or { success: false, error }
+ */
+ipcMain.handle('ssh:sftpWriteFile', (event, connectionId, remotePath, content) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+
+      const writeStream = sftp.createWriteStream(remotePath);
+
+      writeStream.on('error', (writeErr) => {
+        resolve({ success: false, error: writeErr.message });
+      });
+
+      writeStream.on('close', () => {
+        resolve({ success: true });
+      });
+
+      writeStream.end(content, 'utf-8');
+    });
+  });
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// IPC: Local Filesystem
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * List local directory contents.
+ * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
+ */
+ipcMain.handle('fs:listDir', (event, dirPath) => {
+  try {
+    const resolved = path.resolve(dirPath);
+    const entries = fs.readdirSync(resolved, { withFileTypes: true });
+
+    const items = entries
+      .filter(entry => !entry.name.startsWith('.'))
+      .map(entry => {
+        const fullPath = path.join(resolved, entry.name);
+        let size = 0;
+        let modifyTime = null;
+        try {
+          const stat = fs.statSync(fullPath);
+          size = stat.size;
+          modifyTime = stat.mtimeMs;
+        } catch {}
+        return {
+          name: entry.name,
+          size,
+          modifyTime,
+          isDirectory: entry.isDirectory(),
+          isFile: entry.isFile(),
+          path: fullPath,
+        };
+      });
+
+    // Sort: directories first, then alphabetical
+    items.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return { success: true, entries: items, path: resolved };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Get common user directories.
+ */
+ipcMain.handle('fs:userDirs', () => {
+  return {
+    home: app.getPath('home'),
+    desktop: app.getPath('desktop'),
+    documents: app.getPath('documents'),
+    downloads: app.getPath('downloads'),
+  };
+});
+
+/**
+ * Delete a local file.
+ */
+ipcMain.handle('fs:deleteFile', (event, filePath) => {
+  try {
+    const resolved = path.resolve(filePath);
+    fs.unlinkSync(resolved);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Create a local directory.
+ */
+ipcMain.handle('fs:mkdir', (event, dirPath) => {
+  try {
+    const resolved = path.resolve(dirPath);
+    fs.mkdirSync(resolved, { recursive: false });
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Create an empty local file (like touch).
+ */
+ipcMain.handle('fs:createFile', (event, filePath) => {
+  try {
+    const resolved = path.resolve(filePath);
+    // Close immediately to create empty file
+    fs.closeSync(fs.openSync(resolved, 'w'));
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Delete a local file or directory recursively.
+ */
+ipcMain.handle('fs:deletePath', (event, targetPath) => {
+  try {
+    const resolved = path.resolve(targetPath);
+    const stat = fs.statSync(resolved);
+    if (stat.isDirectory()) {
+      fs.rmSync(resolved, { recursive: true, force: true });
+    } else {
+      fs.unlinkSync(resolved);
+    }
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Read a local file and return its content as text.
+ */
+ipcMain.handle('fs:readFile', (event, filePath, encoding) => {
+  try {
+    const resolved = path.resolve(filePath);
+    const content = fs.readFileSync(resolved, encoding || 'utf-8');
+    return { success: true, content: content };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Write text content to a local file.
+ */
+ipcMain.handle('fs:writeFile', (event, filePath, content, encoding) => {
+  try {
+    const resolved = path.resolve(filePath);
+    fs.writeFileSync(resolved, content, encoding || 'utf-8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
   }
 });
 

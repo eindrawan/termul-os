@@ -1,0 +1,180 @@
+<div class="ft-container">
+  <!-- Toolbar -->
+  <div class="ft-toolbar">
+    <div class="ft-toolbar-left">
+      <span class="ft-toolbar-title">File Transfer</span>
+    </div>
+    <div class="ft-toolbar-right">
+      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-upload-btn" title="Upload selected to remote" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+        <span>Upload</span>
+      </button>
+      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-download-btn" title="Download selected to local" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 16 12 21 17 16"/><line x1="12" y1="21" x2="12" y2="9"/></svg>
+        <span>Download</span>
+      </button>
+      <div class="ft-toolbar-sep"></div>
+      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-add-file-btn" title="Create new file in active pane">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+        <span>New File</span>
+      </button>
+      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-add-folder-btn" title="Create new folder in active pane">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+        <span>New Folder</span>
+      </button>
+      <button class="tui-btn tui-btn-ghost ft-btn ft-btn-danger" id="ft-delete-btn" title="Delete selected items" disabled>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+        <span>Delete</span>
+      </button>
+      <div class="ft-toolbar-sep"></div>
+      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-refresh-all" title="Refresh Both">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        <span>Refresh</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Main dual pane -->
+  <div class="ft-panes">
+    <!-- Local pane (left) -->
+    <div class="ft-pane" data-pane="local" id="ft-local-pane">
+      <div class="ft-pane-header">
+        <div class="ft-pane-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+          <span>Local</span>
+        </div>
+        <div class="ft-path-bar">
+          <input type="text" class="ft-path-input" id="ft-local-path" placeholder="/path/to/directory" />
+          <button class="tui-btn-icon ft-path-go" id="ft-local-go" title="Go">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="tui-btn-icon ft-path-up" id="ft-local-up" title="Up">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <button class="tui-btn-icon ft-path-home" id="ft-local-home" title="Home">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="ft-file-list tui-scrollbar" id="ft-local-list">
+        <div class="ft-file-header">
+          <span class="ft-col-name ft-sortable" data-pane="local" data-sort="name" id="ft-local-sort-name">Name</span>
+          <span class="ft-col-size ft-sortable" data-pane="local" data-sort="size" id="ft-local-sort-size">Size</span>
+          <span class="ft-col-date ft-sortable" data-pane="local" data-sort="date" id="ft-local-sort-date">Modified</span>
+        </div>
+        <div class="ft-file-body" id="ft-local-body">
+          <div class="ft-loading">
+            <div class="tui-spinner"></div>
+            <span>Loading...</span>
+          </div>
+        </div>
+      </div>
+      <div class="ft-pane-status" id="ft-local-status">Ready</div>
+    </div>
+
+    <!-- Divider -->
+    <div class="ft-pane-divider"></div>
+
+    <!-- Remote pane (right) -->
+    <div class="ft-pane" data-pane="remote" id="ft-remote-pane">
+      <div class="ft-pane-header">
+        <div class="ft-pane-label">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+          <span>Remote</span>
+        </div>
+        <div class="ft-path-bar">
+          <input type="text" class="ft-path-input" id="ft-remote-path" placeholder="/remote/path" />
+          <button class="tui-btn-icon ft-path-go" id="ft-remote-go" title="Go">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="9 18 15 12 9 6"/></svg>
+          </button>
+          <button class="tui-btn-icon ft-path-up" id="ft-remote-up" title="Up">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg>
+          </button>
+          <button class="tui-btn-icon ft-path-home" id="ft-remote-home" title="Home">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>
+          </button>
+        </div>
+      </div>
+      <div class="ft-file-list tui-scrollbar" id="ft-remote-list">
+        <div class="ft-file-header">
+          <span class="ft-col-name ft-sortable" data-pane="remote" data-sort="name" id="ft-remote-sort-name">Name</span>
+          <span class="ft-col-size ft-sortable" data-pane="remote" data-sort="size" id="ft-remote-sort-size">Size</span>
+          <span class="ft-col-date ft-sortable" data-pane="remote" data-sort="date" id="ft-remote-sort-date">Modified</span>
+        </div>
+        <div class="ft-file-body" id="ft-remote-body">
+          <div class="ft-loading">
+            <div class="tui-spinner"></div>
+            <span>Connecting...</span>
+          </div>
+        </div>
+      </div>
+      <div class="ft-pane-status" id="ft-remote-status">Not connected</div>
+    </div>
+  </div>
+
+  <!-- Transfer queue -->
+  <div class="ft-queue-section">
+    <div class="ft-queue-header" id="ft-queue-toggle">
+      <div class="ft-queue-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+        <span>Transfer Queue</span>
+      </div>
+      <span class="ft-queue-count" id="ft-queue-count">0 transfers</span>
+    </div>
+    <div class="ft-queue-list tui-scrollbar" id="ft-queue-list">
+      <div class="ft-queue-empty">No active transfers</div>
+    </div>
+  </div>
+
+  <!-- Context menu (Windows 11 style) -->
+  <div class="ft-ctx" id="ft-ctx">
+    <button class="ft-ctx-item" data-action="open" id="ft-ctx-open">
+      <svg class="ft-ctx-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+      <span class="ft-ctx-text">Open</span>
+      <span class="ft-ctx-shortcut">Enter</span>
+    </button>
+    <div class="ft-ctx-sep"></div>
+    <button class="ft-ctx-item" data-action="upload" id="ft-ctx-upload">
+      <svg class="ft-ctx-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+      <span class="ft-ctx-text">Upload</span>
+      <span class="ft-ctx-shortcut">Ctrl+U</span>
+    </button>
+    <button class="ft-ctx-item" data-action="download" id="ft-ctx-download">
+      <svg class="ft-ctx-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 16 12 21 17 16"/><line x1="12" y1="21" x2="12" y2="9"/></svg>
+      <span class="ft-ctx-text">Download</span>
+      <span class="ft-ctx-shortcut">Ctrl+D</span>
+    </button>
+    <div class="ft-ctx-sep"></div>
+    <button class="ft-ctx-item" data-action="new-file" id="ft-ctx-new-file">
+      <svg class="ft-ctx-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+      <span class="ft-ctx-text">New File</span>
+    </button>
+    <button class="ft-ctx-item" data-action="new-folder" id="ft-ctx-new-folder">
+      <svg class="ft-ctx-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+      <span class="ft-ctx-text">New Folder</span>
+    </button>
+    <div class="ft-ctx-sep"></div>
+    <button class="ft-ctx-item ft-ctx-item-danger" data-action="delete" id="ft-ctx-delete">
+      <svg class="ft-ctx-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+      <span class="ft-ctx-text">Delete</span>
+      <span class="ft-ctx-shortcut">Del</span>
+    </button>
+  </div>
+
+  <!-- Win11-style dialog (shared tui-modal component) -->
+  <div class="tui-modal-backdrop" id="ft-modal-backdrop">
+    <div class="tui-modal">
+      <div class="tui-modal-header" id="ft-modal-header">
+        <span class="tui-modal-title" id="ft-modal-title">Prompt</span>
+      </div>
+      <div class="tui-modal-body">
+        <div class="tui-modal-message" id="ft-modal-label">Enter name:</div>
+        <input type="text" class="tui-modal-input" id="ft-modal-input" />
+      </div>
+      <div class="tui-modal-footer">
+        <button class="tui-modal-btn tui-modal-btn-secondary" id="ft-modal-cancel">Cancel</button>
+        <button class="tui-modal-btn tui-modal-btn-primary" id="ft-modal-ok">OK</button>
+      </div>
+    </div>
+  </div>
+</div>

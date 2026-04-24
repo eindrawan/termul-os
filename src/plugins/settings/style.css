@@ -7,47 +7,13 @@
   color: var(--tui-text-primary, #e0e0e0);
 }
 
+/* Sidebar container — TuiSidebarNav component fills this */
 .settings-sidebar {
-  width: 220px;
-  background: rgba(255, 255, 255, 0.03);
-  border-right: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.08));
   flex-shrink: 0;
 }
 
-.settings-nav {
-  padding: 16px 8px;
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.settings-nav-item {
-  width: 100%;
-  padding: 10px 12px;
-  border-radius: 6px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: 13px;
-  font-weight: 400;
-  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
-  text-align: left;
-  transition: all 150ms;
-}
-
-.settings-nav-item:hover {
-  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.06));
-  color: var(--tui-text-primary, #ffffff);
-}
-
-.settings-nav-item.active {
-  background: var(--tui-accent-subtle, rgba(0, 103, 192, 0.2));
-  color: var(--tui-accent-secondary, #60cdff);
-  font-weight: 500;
-}
-
-.settings-nav-item svg {
-  flex-shrink: 0;
+.settings-sidebar .tui-sidebar-nav {
+  height: 100%;
 }
 
 .settings-main {

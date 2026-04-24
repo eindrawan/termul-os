@@ -1,5 +1,5 @@
 /**
- * Taskbar - Bottom taskbar with running apps, system tray, and start button
+ * Taskbar - Bottom taskbar with running apps, connection status, and start button
  */
 class Taskbar {
   constructor() {
@@ -7,6 +7,7 @@ class Taskbar {
     this.startMenu = null;
     this.onStartClick = null;
     this.onAppClick = null;
+    this.onReconnectClick = null;
     this.clockInterval = null;
   }
 
@@ -34,13 +35,8 @@ class Taskbar {
         <!-- Running app icons injected here -->
       </div>
       <div class="taskbar-tray" id="taskbar-tray">
-        <div class="taskbar-tray-icons">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <path d="M5 12.55a11 11 0 0 1 14.08 0M1.42 9a16 16 0 0 1 21.16 0M8.53 16.11a6 6 0 0 1 6.95 0M12 20h.01"/>
-          </svg>
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <rect x="1" y="6" width="22" height="12" rx="2"/><path d="M23 13v-2"/>
-          </svg>
+        <div class="taskbar-connection-status" id="taskbar-connection-status">
+          <!-- Connection status injected dynamically -->
         </div>
         <div class="taskbar-clock" id="taskbar-clock">
           <span class="clock-time"></span>
@@ -77,6 +73,55 @@ class Taskbar {
         <span class="taskbar-app-indicator"></span>
       </button>
     `).join('');
+  }
+
+  /**
+   * Update the connection status display in the tray.
+   * @param {{ status: string, profile: Object } | null} connStatus
+   */
+  updateConnectionStatus(connStatus) {
+    const container = document.getElementById('taskbar-connection-status');
+    if (!container) return;
+
+    if (!connStatus) {
+      container.innerHTML = '';
+      return;
+    }
+
+    const { status, profile } = connStatus;
+    const host = profile ? (profile.name || profile.host) : 'Unknown';
+
+    if (status === 'connected') {
+      container.innerHTML = `
+        <div class="conn-indicator conn-connected" title="Connected to ${host}">
+          <span class="conn-dot"></span>
+          <span class="conn-label">${host}</span>
+        </div>
+      `;
+    } else if (status === 'disconnected') {
+      container.innerHTML = `
+        <div class="conn-indicator conn-disconnected" title="Disconnected from ${host}">
+          <span class="conn-dot"></span>
+          <span class="conn-label">Disconnected</span>
+          <button class="conn-reconnect-btn" id="taskbar-reconnect-btn" title="Reconnect to ${host}">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+          </button>
+        </div>
+      `;
+      // Bind reconnect button
+      container.querySelector('#taskbar-reconnect-btn')?.addEventListener('click', () => {
+        if (this.onReconnectClick) this.onReconnectClick();
+      });
+    } else if (status === 'reconnecting') {
+      container.innerHTML = `
+        <div class="conn-indicator conn-reconnecting" title="Reconnecting to ${host}...">
+          <span class="conn-dot pulse"></span>
+          <span class="conn-label">Reconnecting...</span>
+        </div>
+      `;
+    }
   }
 
   startClock() {

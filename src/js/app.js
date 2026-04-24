@@ -8,6 +8,12 @@ class TermulOS {
     this.plugins = [];
     this.connectionId = null;
     this.currentProfile = null;
+
+    // ─── Tab Management ──────────────────────────────────────────────
+    /** @type {Array<{id:string, profile:Object, connectionId:string}>} */
+    this.tabs = [];
+    /** @type {string|null} Currently active tab ID */
+    this.activeTabId = null;
   }
 
   /**
@@ -16,6 +22,9 @@ class TermulOS {
   async init() {
     // Load xterm.js globally (needed before any terminal plugin mounts)
     await this.loadXterm();
+
+    // Load Monaco Editor globally (needed before file-editor plugin mounts)
+    await this.loadMonaco();
 
     this.showConnectionDialog();
 
@@ -48,6 +57,26 @@ class TermulOS {
     window.termulAPI.ssh.onShellClosed((data) => {
       const event = new CustomEvent('termul:shell-closed', { detail: data });
       document.dispatchEvent(event);
+    });
+
+    // SFTP progress events — bridge IPC to DOM for plugins
+    window.termulAPI.ssh.onSftpProgress((data) => {
+      const event = new CustomEvent('termul:sftp-progress', { detail: data });
+      document.dispatchEvent(event);
+    });
+
+    // SSH connection lifecycle — detect drops and errors
+    window.termulAPI.ssh.onConnectionClosed((data) => {
+      this.handleConnectionLost(data.connectionId, 'Connection closed by server');
+    });
+
+    window.termulAPI.ssh.onConnectionError((data) => {
+      this.handleConnectionLost(data.connectionId, data.error || 'Connection error');
+    });
+
+    // Listen for "open in editor" events from plugins (e.g. file-transfer)
+    document.addEventListener('termul:open-in-editor', (e) => {
+      this.openFileInEditor(e.detail);
     });
   }
 
@@ -465,6 +494,20 @@ class TermulOS {
    * Enter the desktop environment after successful connection
    */
   async enterDesktop(profile) {
+    // If first connection, build the full desktop shell
+    if (this.state !== 'desktop') {
+      await this.enterDesktopShell();
+    }
+
+    // Create tab for this connection
+    this.addTab(profile, this.connectionId);
+  }
+
+  /**
+   * Build the desktop shell (called once on first connection).
+   * Subsequent connections just add tabs without rebuilding.
+   */
+  async enterDesktopShell() {
     this.state = 'desktop';
     const app = document.getElementById('app');
     app.classList.remove('dialog-mode');
@@ -478,6 +521,14 @@ class TermulOS {
       <div class="os-titlebar" id="os-titlebar">
         <div class="os-titlebar-left">
           <span class="os-titlebar-app-name">TermulOS</span>
+        </div>
+        <div class="os-titlebar-tabs" id="os-titlebar-tabs">
+          <!-- Tab items rendered dynamically -->
+          <button class="titlebar-tab-add" id="titlebar-tab-add" title="New Connection">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+          </button>
         </div>
         <div class="os-titlebar-controls">
           <button class="titlebar-btn" id="titlebar-minimize">
@@ -493,6 +544,7 @@ class TermulOS {
       </div>
       <div id="os-desktop">
         <div id="desktop-icons"></div>
+        <div id="dashboard-widgets" class="dashboard-widgets"></div>
       </div>
       <div id="os-window-area"></div>
       <div id="os-start-menu" class="start-menu"></div>
@@ -503,6 +555,12 @@ class TermulOS {
     document.getElementById('titlebar-minimize')?.addEventListener('click', () => window.termulAPI.window.minimize());
     document.getElementById('titlebar-maximize')?.addEventListener('click', () => window.termulAPI.window.maximize());
     document.getElementById('titlebar-close')?.addEventListener('click', () => window.termulAPI.window.close());
+
+    // Tab add button
+    document.getElementById('titlebar-tab-add')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.showTabConnectionPicker();
+    });
 
     // Initialize components
     window.Desktop.init();
@@ -522,6 +580,11 @@ class TermulOS {
         window.WindowManager.focus(windowId);
       }
     };
+    window.Taskbar.onReconnectClick = () => {
+      if (this.activeTabId) {
+        this.reconnectTab(this.activeTabId);
+      }
+    };
 
     window.StartMenu.init();
     window.StartMenu.setPlugins(this.plugins);
@@ -534,21 +597,14 @@ class TermulOS {
     };
     window.StartMenu.onClose = (action) => {
       if (action === 'power') {
-        this.disconnectAndReturnToDialog();
+        this.disconnectAllAndReturnToDialog();
       }
       window.StartMenu.close();
     };
 
-    // Set username in start menu
-    const usernameEl = document.querySelector('#start-menu-username');
-    if (usernameEl) {
-      usernameEl.textContent = profile.username || 'User';
-    }
-
-    // Auto-open terminal
-    const terminalPlugin = this.plugins.find(p => p.dirName === 'terminal');
-    if (terminalPlugin) {
-      this.launchApp(terminalPlugin);
+    // Initialize dashboard widgets
+    if (window.DashboardWidgets) {
+      window.DashboardWidgets.init();
     }
 
     // Start taskbar update loop
@@ -575,11 +631,661 @@ class TermulOS {
   }
 
   /**
+   * Open a file in the file-editor plugin.
+   * Finds or launches the file-editor, then dispatches an event with the file info.
+   * @param {Object} detail - { source: 'local'|'remote', path: string, name: string }
+   */
+  openFileInEditor(detail) {
+    if (!detail || !detail.path) return;
+
+    // Find the file-editor plugin manifest
+    const editorPlugin = this.plugins.find(p => p.dirName === 'file-editor');
+    if (!editorPlugin) {
+      console.warn('[TermulOS] file-editor plugin not found');
+      return;
+    }
+
+    // Check if a file-editor window is already open for this tab
+    let existingWindowId = null;
+    for (const [windowId, win] of window.WindowManager.windows) {
+      if (win.plugin.dirName === 'file-editor' && win.tabId === window.WindowManager.currentTabId) {
+        existingWindowId = windowId;
+        break;
+      }
+    }
+
+    if (existingWindowId) {
+      // Focus existing editor window and tell it to open the file.
+      // Use setTimeout to defer focus past the originating click event,
+      // which bubbles out of the shadow DOM and re-focuses the source window.
+      setTimeout(() => {
+        window.WindowManager.focus(existingWindowId);
+      }, 0);
+      setTimeout(() => {
+        document.dispatchEvent(new CustomEvent('termul:editor-open-file', { detail: detail }));
+      }, 100);
+    } else {
+      // Open a new file-editor window
+      const windowId = window.WindowManager.open(editorPlugin);
+      // Re-focus after the current event finishes bubbling, otherwise the
+      // originating click from file-transfer steals focus back.
+      setTimeout(() => {
+        window.WindowManager.focus(windowId);
+      }, 0);
+      // Wait for plugin to mount, then dispatch the open-file event
+      const waitForMount = () => {
+        const instance = window.PluginLoader.instances.get(windowId);
+        if (instance && instance._lifecycle && instance._lifecycle.onMount) {
+          // Plugin has mounted — give it a bit more time to init Monaco
+          setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('termul:editor-open-file', { detail: detail }));
+          }, 300);
+        } else {
+          // Not yet mounted, retry
+          setTimeout(waitForMount, 100);
+        }
+      };
+      setTimeout(waitForMount, 100);
+    }
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════
+   * Tab Management
+   * ═════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Add a new connection tab.
+   * @param {Object} profile - Connection profile
+   * @param {string} connectionId - Active SSH connection ID
+   */
+  addTab(profile, connectionId) {
+    const tabId = 'tab_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 7);
+
+    const tab = {
+      id: tabId,
+      profile: profile,
+      connectionId: connectionId,
+      status: 'connected', // 'connected' | 'disconnected' | 'reconnecting'
+    };
+
+    this.tabs.push(tab);
+
+    // Notify plugins: new connection established
+    document.dispatchEvent(new CustomEvent('termul:connection-status', {
+      detail: {
+        status: 'connected',
+        connectionId: connectionId,
+        profile: profile
+      }
+    }));
+
+    // Switch to the new tab (also renders tabs and updates taskbar)
+    this.switchTab(tabId);
+
+    // Auto-open terminal for this tab
+    const terminalPlugin = this.plugins.find(p => p.dirName === 'terminal');
+    if (terminalPlugin) {
+      this.launchApp(terminalPlugin);
+    }
+
+    // Update username in start menu
+    this.updateStartMenuUser(profile);
+  }
+
+  /**
+   * Switch to a specific tab.
+   * @param {string} tabId
+   */
+  switchTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    // Hide windows from previous tab
+    if (this.activeTabId && this.activeTabId !== tabId) {
+      window.WindowManager.hideWindowsForTab(this.activeTabId);
+    }
+
+    // Set active tab
+    this.activeTabId = tabId;
+
+    // Update WindowManager's current tab
+    window.WindowManager.currentTabId = tabId;
+
+    // Update connection references for plugins (live getters)
+    this.connectionId = tab.connectionId;
+    this.currentProfile = tab.profile;
+
+    // Show windows for this tab
+    const lastFocusedId = window.WindowManager.showWindowsForTab(tabId);
+    if (lastFocusedId) {
+      window.WindowManager.focus(lastFocusedId);
+    }
+
+    // Update start menu username
+    this.updateStartMenuUser(tab.profile);
+
+    // Notify dashboard widgets of tab switch so they can follow the active connection
+    document.dispatchEvent(new CustomEvent('termul:tab-switched', {
+      detail: {
+        tabId: tabId,
+        connectionId: tab.connectionId,
+        status: tab.status,
+        profile: tab.profile,
+      }
+    }));
+
+    // Re-render tabs to update active state
+    this.renderTabs();
+
+    // Update taskbar
+    this.updateTaskbar();
+  }
+
+  /**
+   * Close a specific tab and disconnect its SSH connection.
+   * @param {string} tabId
+   */
+  async closeTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    // Close all windows for this tab
+    window.WindowManager.closeWindowsForTab(tabId);
+
+    // Disconnect SSH
+    try {
+      await window.termulAPI.ssh.disconnect(tab.connectionId);
+    } catch (e) {
+      console.warn('[TermulOS] Error disconnecting tab:', e);
+    }
+
+    // Remove tab
+    this.tabs = this.tabs.filter(t => t.id !== tabId);
+
+    // If no tabs left, go back to connection dialog
+    if (this.tabs.length === 0) {
+      this.disconnectAllAndReturnToDialog();
+      return;
+    }
+
+    // If we closed the active tab, switch to the last tab
+    if (this.activeTabId === tabId) {
+      const newActiveTab = this.tabs[this.tabs.length - 1];
+      this.switchTab(newActiveTab.id);
+    }
+
+    this.renderTabs();
+    this.updateTaskbar();
+  }
+
+  /**
+   * Render tabs in the titlebar.
+   */
+  renderTabs() {
+    const tabsContainer = document.getElementById('os-titlebar-tabs');
+    if (!tabsContainer) return;
+
+    // Remove existing tab items (keep the add button)
+    tabsContainer.querySelectorAll('.titlebar-tab').forEach(el => el.remove());
+
+    const addButton = tabsContainer.querySelector('.titlebar-tab-add');
+
+    this.tabs.forEach(tab => {
+      const tabEl = document.createElement('div');
+      let tabClasses = 'titlebar-tab';
+      if (tab.id === this.activeTabId) tabClasses += ' active';
+      if (tab.status === 'disconnected') tabClasses += ' disconnected';
+      if (tab.status === 'reconnecting') tabClasses += ' reconnecting';
+      tabEl.className = tabClasses;
+      tabEl.dataset.tabId = tab.id;
+
+      const dotColor = tab.status === 'disconnected' ? '#E81123'
+                     : tab.status === 'reconnecting' ? '#FF8C00'
+                     : (tab.profile.color || '#0078D4');
+      const colorDot = `<span class="titlebar-tab-dot" style="background:${dotColor}"></span>`;
+
+      const tabName = tab.status === 'reconnecting' ? 'Reconnecting...' : (tab.profile.name || tab.profile.host);
+      const name = `<span class="titlebar-tab-name">${tabName}</span>`;
+      const closeBtn = `<button class="titlebar-tab-close" data-tab-close="${tab.id}" title="Close tab">
+        <svg width="10" height="10" viewBox="0 0 10 10">
+          <line x1="2" y1="2" x2="8" y2="8" stroke="currentColor" stroke-width="1.2"/>
+          <line x1="8" y1="2" x2="2" y2="8" stroke="currentColor" stroke-width="1.2"/>
+        </svg>
+      </button>`;
+
+      tabEl.innerHTML = colorDot + name + closeBtn;
+
+      // Click tab to switch
+      tabEl.addEventListener('click', (e) => {
+        if (e.target.closest('.titlebar-tab-close')) return;
+        this.switchTab(tab.id);
+        // If this tab is disconnected, show the dialog
+        if (tab.status === 'disconnected') {
+          this.showDisconnectDialog(tab, 'Connection to server was lost');
+        }
+      });
+
+      // Close button
+      tabEl.querySelector('.titlebar-tab-close')?.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.closeTab(tab.id);
+      });
+
+      tabsContainer.insertBefore(tabEl, addButton);
+    });
+  }
+
+  /**
+   * Show a connection picker popup for adding a new tab.
+   */
+  async showTabConnectionPicker() {
+    // Remove existing picker
+    document.getElementById('tab-connection-picker')?.remove();
+
+    const profiles = await window.ConnectionManager.getProfiles();
+
+    const picker = document.createElement('div');
+    picker.id = 'tab-connection-picker';
+    picker.className = 'tab-connection-picker';
+    picker.innerHTML = `
+      <div class="tab-picker-header">
+        <span class="tab-picker-title">Connect to Server</span>
+        <button class="tab-picker-close" id="tab-picker-close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="tab-picker-body">
+        <div class="tab-picker-profiles" id="tab-picker-profiles">
+          ${profiles.length === 0 ? `
+            <div class="tab-picker-empty">
+              <p>No saved profiles</p>
+              <small>Create one below</small>
+            </div>
+          ` : profiles.map(p => `
+            <div class="tab-picker-profile" data-profile-id="${p.id}">
+              <span class="tab-picker-dot" style="background:${p.color || '#0078D4'}"></span>
+              <div class="tab-picker-info">
+                <span class="tab-picker-name">${p.name || p.host}</span>
+                <span class="tab-picker-host">${p.username}@${p.host}</span>
+              </div>
+              <button class="tab-picker-connect" data-action="connect" title="Connect">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M5 12h14M12 5l7 7-7 7"/>
+                </svg>
+              </button>
+            </div>
+          `).join('')}
+        </div>
+        <div class="tab-picker-divider"></div>
+        <div class="tab-picker-quick">
+          <div class="tab-picker-quick-title">Quick Connect</div>
+          <div class="tab-picker-form">
+            <div class="tab-picker-form-row">
+              <input type="text" id="tab-quick-host" placeholder="Host (e.g. 192.168.1.100)" />
+              <input type="number" id="tab-quick-port" placeholder="22" value="22" style="width:70px" />
+            </div>
+            <input type="text" id="tab-quick-username" placeholder="Username" />
+            <input type="password" id="tab-quick-password" placeholder="Password" />
+            <button class="btn btn-accent tab-picker-connect-btn" id="tab-quick-connect">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M5 12h14M12 5l7 7-7 7"/>
+              </svg>
+              Connect
+            </button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(picker);
+
+    // Close picker
+    document.getElementById('tab-picker-close')?.addEventListener('click', () => {
+      picker.remove();
+    });
+
+    // Click outside to close
+    const clickOutsideHandler = (e) => {
+      if (!picker.contains(e.target) && !e.target.closest('#titlebar-tab-add')) {
+        picker.remove();
+        document.removeEventListener('click', clickOutsideHandler);
+      }
+    };
+    setTimeout(() => document.addEventListener('click', clickOutsideHandler), 10);
+
+    // Saved profile connect buttons
+    picker.querySelectorAll('.tab-picker-profile').forEach(item => {
+      item.addEventListener('click', async (e) => {
+        if (!e.target.closest('.tab-picker-connect')) return;
+        const profileId = item.dataset.profileId;
+        const profile = profiles.find(p => p.id === profileId);
+        if (!profile) return;
+        picker.remove();
+        await this.connectToNewTab(profile);
+      });
+
+      // Double-click to connect
+      item.addEventListener('dblclick', async () => {
+        const profileId = item.dataset.profileId;
+        const profile = profiles.find(p => p.id === profileId);
+        if (!profile) return;
+        picker.remove();
+        await this.connectToNewTab(profile);
+      });
+    });
+
+    // Quick connect form
+    document.getElementById('tab-quick-connect')?.addEventListener('click', async () => {
+      const host = document.getElementById('tab-quick-host')?.value.trim();
+      const port = parseInt(document.getElementById('tab-quick-port')?.value) || 22;
+      const username = document.getElementById('tab-quick-username')?.value.trim();
+      const password = document.getElementById('tab-quick-password')?.value || '';
+
+      if (!host || !username) {
+        const errEl = picker.querySelector('.tab-picker-form-error');
+        if (errEl) errEl.remove();
+        const err = document.createElement('div');
+        err.className = 'tab-picker-form-error';
+        err.textContent = 'Host and username are required';
+        picker.querySelector('.tab-picker-form').prepend(err);
+        setTimeout(() => err.remove(), 3000);
+        return;
+      }
+
+      const profile = {
+        id: window.ConnectionManager.generateId(),
+        name: host,
+        host,
+        port,
+        username,
+        authType: 'password',
+        password,
+        color: window.ConnectionManager.getRandomColor(),
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      };
+
+      picker.remove();
+      await this.connectToNewTab(profile);
+    });
+  }
+
+  /**
+   * Connect to a profile as a new tab (from desktop mode).
+   * @param {Object} profile
+   */
+  async connectToNewTab(profile) {
+    // Show a brief connecting indicator on the tab bar
+    const tabsContainer = document.getElementById('os-titlebar-tabs');
+    if (tabsContainer) {
+      const addBtn = tabsContainer.querySelector('.titlebar-tab-add');
+      const connectingTab = document.createElement('div');
+      connectingTab.className = 'titlebar-tab connecting';
+      connectingTab.innerHTML = `
+        <span class="titlebar-tab-name">Connecting...</span>
+      `;
+      tabsContainer.insertBefore(connectingTab, addBtn);
+    }
+
+    try {
+      const result = await window.ConnectionManager.connect(profile);
+      if (result.success) {
+        this.connectionId = result.connectionId;
+        this.currentProfile = profile;
+        // Remove the temporary connecting indicator
+        tabsContainer?.querySelector('.titlebar-tab.connecting')?.remove();
+        this.addTab(profile, result.connectionId);
+      } else {
+        tabsContainer?.querySelector('.titlebar-tab.connecting')?.remove();
+        alert('Connection failed: ' + (result.error || 'Unknown error'));
+      }
+    } catch (err) {
+      tabsContainer?.querySelector('.titlebar-tab.connecting')?.remove();
+      alert('Connection failed: ' + (err.error || err.message || 'Unknown error'));
+    }
+  }
+
+  /**
+   * Update the start menu username display.
+   * @param {Object} profile
+   */
+  updateStartMenuUser(profile) {
+    const usernameEl = document.querySelector('#start-menu-username');
+    if (usernameEl) {
+      usernameEl.textContent = profile?.username || 'User';
+    }
+  }
+
+  /**
+   * Disconnect all tabs and return to connection dialog.
+   */
+  async disconnectAllAndReturnToDialog() {
+    if (this.taskbarLoop) {
+      clearInterval(this.taskbarLoop);
+    }
+
+    // Close all windows (all tabs)
+    window.WindowManager.closeAll();
+
+    // Disconnect all SSH connections
+    for (const tab of this.tabs) {
+      try {
+        await window.termulAPI.ssh.disconnect(tab.connectionId);
+      } catch (e) {
+        console.warn('[TermulOS] Error disconnecting:', e);
+      }
+    }
+    this.tabs = [];
+    this.activeTabId = null;
+
+    // Reset connection manager state
+    window.ConnectionManager.connectionId = null;
+    window.ConnectionManager.currentConnection = null;
+
+    window.Taskbar.destroy();
+
+    // Destroy dashboard widgets
+    if (window.DashboardWidgets) {
+      window.DashboardWidgets.destroy();
+    }
+
+    this.showConnectionDialog();
+  }
+
+  /* ═════════════════════════════════════════════════════════════════════
+   * Connection Status & Reconnection
+   * ═════════════════════════════════════════════════════════════════════ */
+
+  /**
+   * Called when an SSH connection is lost (closed by server or error).
+   * @param {string} connectionId
+   * @param {string} reason - Human-readable reason
+   */
+  handleConnectionLost(connectionId, reason) {
+    // Find the tab that owns this connection
+    const tab = this.tabs.find(t => t.connectionId === connectionId);
+    if (!tab) return;
+
+    // Avoid duplicate handling
+    if (tab.status === 'disconnected') return;
+
+    tab.status = 'disconnected';
+
+    // Notify all plugins via the event bus
+    document.dispatchEvent(new CustomEvent('termul:connection-status', {
+      detail: {
+        status: 'disconnected',
+        connectionId: connectionId,
+        profile: tab.profile,
+        reason: reason
+      }
+    }));
+
+    // If this is the active tab, show the disconnect dialog
+    if (tab.id === this.activeTabId) {
+      this.showDisconnectDialog(tab, reason);
+    }
+
+    // Update UI
+    this.renderTabs();
+    this.updateTaskbar();
+  }
+
+  /**
+   * Show a centered modal dialog indicating the connection was lost.
+   * @param {Object} tab - The tab whose connection dropped
+   * @param {string} reason - Reason text
+   */
+  showDisconnectDialog(tab, reason) {
+    // Remove existing dialog if any
+    document.getElementById('connection-lost-dialog')?.remove();
+
+    const profile = tab.profile;
+    const dialog = document.createElement('div');
+    dialog.id = 'connection-lost-dialog';
+    dialog.className = 'connection-lost-overlay';
+    dialog.innerHTML = `
+      <div class="connection-lost-dialog">
+        <div class="connection-lost-icon">
+          <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="#E81123" stroke-width="1.5">
+            <circle cx="12" cy="12" r="10"/>
+            <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/>
+          </svg>
+        </div>
+        <h2 class="connection-lost-title">Connection Lost</h2>
+        <p class="connection-lost-detail">${profile.name || profile.host}</p>
+        <p class="connection-lost-reason">${reason}</p>
+        <div class="connection-lost-actions">
+          <button class="btn btn-secondary" id="conn-lost-close">Close Tab</button>
+          <button class="btn btn-accent" id="conn-lost-reconnect">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+            </svg>
+            Reconnect
+          </button>
+        </div>
+      </div>
+    `;
+
+    document.body.appendChild(dialog);
+
+    // Close tab button
+    dialog.querySelector('#conn-lost-close')?.addEventListener('click', () => {
+      dialog.remove();
+      this.closeTab(tab.id);
+    });
+
+    // Reconnect button
+    dialog.querySelector('#conn-lost-reconnect')?.addEventListener('click', async () => {
+      dialog.remove();
+      await this.reconnectTab(tab.id);
+    });
+  }
+
+  /**
+   * Reconnect a disconnected tab.
+   * @param {string} tabId
+   */
+  async reconnectTab(tabId) {
+    const tab = this.tabs.find(t => t.id === tabId);
+    if (!tab) return;
+
+    tab.status = 'reconnecting';
+
+    // Notify plugins: reconnecting
+    document.dispatchEvent(new CustomEvent('termul:connection-status', {
+      detail: {
+        status: 'reconnecting',
+        connectionId: tab.connectionId,
+        profile: tab.profile
+      }
+    }));
+
+    this.renderTabs();
+    this.updateTaskbar();
+
+    try {
+      const result = await window.ConnectionManager.connect(tab.profile);
+      if (result.success) {
+        const oldConnectionId = tab.connectionId;
+        tab.connectionId = result.connectionId;
+        tab.status = 'connected';
+
+        // If this is the active tab, update the live connection references
+        if (tab.id === this.activeTabId) {
+          this.connectionId = tab.connectionId;
+          this.currentProfile = tab.profile;
+        }
+
+        // Notify plugins: reconnected
+        document.dispatchEvent(new CustomEvent('termul:connection-status', {
+          detail: {
+            status: 'connected',
+            connectionId: tab.connectionId,
+            previousConnectionId: oldConnectionId,
+            profile: tab.profile
+          }
+        }));
+
+        this.renderTabs();
+        this.updateTaskbar();
+      } else {
+        tab.status = 'disconnected';
+
+        // Notify plugins: reconnection failed
+        document.dispatchEvent(new CustomEvent('termul:connection-status', {
+          detail: {
+            status: 'disconnected',
+            connectionId: tab.connectionId,
+            profile: tab.profile,
+            reason: result.error || 'Reconnection failed'
+          }
+        }));
+
+        this.renderTabs();
+        this.updateTaskbar();
+        this.showDisconnectDialog(tab, result.error || 'Reconnection failed');
+      }
+    } catch (err) {
+      tab.status = 'disconnected';
+
+      // Notify plugins: reconnection failed
+      document.dispatchEvent(new CustomEvent('termul:connection-status', {
+        detail: {
+          status: 'disconnected',
+          connectionId: tab.connectionId,
+          profile: tab.profile,
+          reason: err.error || err.message || 'Reconnection failed'
+        }
+      }));
+
+      this.renderTabs();
+      this.updateTaskbar();
+      this.showDisconnectDialog(tab, err.error || err.message || 'Reconnection failed');
+    }
+  }
+
+  /**
+   * Get the connection status of the active tab.
+   * @returns {{ status: string, profile: Object } | null}
+   */
+  getActiveTabConnectionStatus() {
+    if (!this.activeTabId) return null;
+    const tab = this.tabs.find(t => t.id === this.activeTabId);
+    if (!tab) return null;
+    return { status: tab.status, profile: tab.profile };
+  }
+
+  /**
    * Update taskbar items
    */
   updateTaskbar() {
     const items = window.WindowManager.getTaskbarItems();
     window.Taskbar.updateItems(items);
+    // Update connection status in tray
+    window.Taskbar.updateConnectionStatus(this.getActiveTabConnectionStatus());
   }
 
   /**
@@ -621,21 +1327,91 @@ class TermulOS {
   }
 
   /**
-   * Disconnect and return to connection dialog
+   * Load Monaco Editor via the monaco:// custom protocol.
+   * The loader.js is fetched, then RequireJS loads the editor module.
+   * Workers use the monaco:// protocol to load from node_modules.
+   */
+  async loadMonaco() {
+    if (this._monacoLoaded) return;
+    this._monacoLoaded = true;
+
+    try {
+      const baseUrl = window.termulAPI.monaco.getBaseUrl();
+
+      // Set up Monaco Environment for web workers
+      // The editor.worker file is at vs/assets/editor.worker-*.js
+      // We point to it via the monaco:// protocol
+      const editorWorkerUrl = baseUrl + 'assets/editor.worker-Be8ye1pW.js';
+      window.MonacoEnvironment = {
+        getWorkerUrl: function (workerId, label) {
+          // All worker types use the editor.worker as base
+          // Monaco's worker system handles the specific language workers
+          return editorWorkerUrl;
+        },
+        getWorker: function (workerId, label) {
+          const url = window.MonacoEnvironment.getWorkerUrl(workerId, label);
+          return new Worker(url);
+        }
+      };
+
+      // Load Monaco's AMD loader via a script tag using the custom protocol
+      await new Promise((resolve, reject) => {
+        const loaderScript = document.createElement('script');
+        loaderScript.src = baseUrl + 'loader.js';
+        loaderScript.onload = resolve;
+        loaderScript.onerror = (e) => {
+          console.error('[TermulOS] Monaco loader.js failed to load from:', loaderScript.src, e);
+          reject(new Error('Monaco loader failed'));
+        };
+        document.head.appendChild(loaderScript);
+      });
+
+      // Configure RequireJS paths to use monaco:// protocol
+      window.require.config({
+        paths: { 'vs': baseUrl }
+      });
+
+      // Load the main editor module via RequireJS
+      await new Promise((resolve, reject) => {
+        window.require(['vs/editor/editor.main'], function () {
+          if (window.monaco) {
+            window.PluginLoader._monacoReady = true;
+            resolve();
+          } else {
+            reject(new Error('Monaco loaded but window.monaco is undefined'));
+          }
+        }, function (err) {
+          console.error('[TermulOS] Monaco editor.main failed to load:', err);
+          reject(err);
+        });
+      });
+
+      // Fetch Monaco's static CSS (editor.main.css) and store it for shadow DOM injection.
+      // Monaco loads this CSS via a <link> element in the main document's <head>,
+      // but <link> styles are NOT visible inside shadow DOMs. Plugins that use Monaco
+      // (e.g. file-editor) need the CSS injected as a <style> inside their shadow root.
+      // The monaco:// protocol supports fetch() (supportFetchAPI: true).
+      try {
+        const cssResponse = await fetch(baseUrl + 'editor/editor.main.css');
+        if (cssResponse.ok) {
+          window.PluginLoader._monacoCSS = await cssResponse.text();
+        } else {
+          console.warn('[TermulOS] Failed to fetch Monaco CSS:', cssResponse.status);
+        }
+      } catch (cssErr) {
+        console.warn('[TermulOS] Failed to fetch Monaco CSS:', cssErr);
+      }
+
+    } catch (err) {
+      console.error('[TermulOS] Failed to load Monaco Editor:', err);
+    }
+  }
+
+  /**
+   * Disconnect and return to connection dialog (legacy — disconnects all)
    */
   async disconnectAndReturnToDialog() {
-    if (this.taskbarLoop) {
-      clearInterval(this.taskbarLoop);
-    }
-
-    // Close all windows (triggers plugin unmount lifecycle)
-    window.WindowManager.closeAll();
-
-    await window.ConnectionManager.disconnect();
-
-    window.Taskbar.destroy();
-
-    this.showConnectionDialog();
+    await this.disconnectAllAndReturnToDialog();
   }
 }
 

@@ -19,20 +19,23 @@
 
 /* ─── Design Tokens (scoped to :host) ──────────────────────────────── */
 :host {
+  /* Force dark mode for all native UI elements (scrollbars, form controls) */
+  color-scheme: dark;
+
   /* Colors */
   --tui-bg-base: #1a1a1a;
   --tui-bg-surface: #0f0f0f;
-  --tui-bg-elevated: rgba(30, 30, 30, 0.85);
-  --tui-bg-glass: rgba(60, 60, 60, 0.4);
-  --tui-bg-hover: rgba(255, 255, 255, 0.08);
-  --tui-bg-active: rgba(255, 255, 255, 0.12);
-  --tui-bg-selected: rgba(255, 255, 255, 0.15);
+  --tui-bg-elevated: rgba(28, 28, 28, 0.92);
+  --tui-bg-glass: rgba(60, 60, 60, 0.35);
+  --tui-bg-hover: rgba(255, 255, 255, 0.07);
+  --tui-bg-active: rgba(255, 255, 255, 0.1);
+  --tui-bg-selected: rgba(255, 255, 255, 0.12);
 
   /* Accent */
   --tui-accent-primary: #0067C0;
   --tui-accent-secondary: #60CDFF;
   --tui-accent-hover: #005A9E;
-  --tui-accent-subtle: rgba(0, 103, 192, 0.2);
+  --tui-accent-subtle: rgba(0, 103, 192, 0.15);
 
   /* Semantic */
   --tui-success: #00b294;
@@ -44,18 +47,18 @@
   /* Text */
   --tui-text-primary: #FFFFFF;
   --tui-text-secondary: rgba(255, 255, 255, 0.7);
-  --tui-text-tertiary: rgba(255, 255, 255, 0.5);
-  --tui-text-disabled: rgba(255, 255, 255, 0.3);
+  --tui-text-tertiary: rgba(255, 255, 255, 0.45);
+  --tui-text-disabled: rgba(255, 255, 255, 0.25);
 
-  /* Border */
-  --tui-border-subtle: rgba(255, 255, 255, 0.08);
-  --tui-border-medium: rgba(255, 255, 255, 0.12);
-  --tui-border-strong: rgba(255, 255, 255, 0.18);
+  /* Border — ultra-subtle */
+  --tui-border-subtle: rgba(255, 255, 255, 0.06);
+  --tui-border-medium: rgba(255, 255, 255, 0.1);
+  --tui-border-strong: rgba(255, 255, 255, 0.16);
 
-  /* Shadow */
-  --tui-shadow-sm: 0 2px 4px rgba(0, 0, 0, 0.2);
-  --tui-shadow-md: 0 4px 12px rgba(0, 0, 0, 0.3);
-  --tui-shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.4);
+  /* Shadow — softer */
+  --tui-shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.2);
+  --tui-shadow-md: 0 2px 10px rgba(0, 0, 0, 0.25);
+  --tui-shadow-lg: 0 4px 24px rgba(0, 0, 0, 0.35);
 
   /* Radius */
   --tui-radius-sm: 4px;
@@ -77,15 +80,17 @@
   /* Typography */
   --tui-font-family: 'Segoe UI', -apple-system, BlinkMacSystemFont, 'Inter', sans-serif;
   --tui-font-mono: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+
+  /* Scrollbar — modern thin dark */
+  scrollbar-color: rgba(255, 255, 255, 0.12) transparent;
+  scrollbar-width: thin;
 }
 
 /* ─── Base Reset (inside shadow) ───────────────────────────────────── */
 .plugin-root {
   width: 100%;
   height: 100%;
-  font-family: var(--tui-font-family);
-  font-size: 14px;
-  line-height: 1.5;
+  overflow: hidden;
   color: var(--tui-text-primary);
   -webkit-font-smoothing: antialiased;
 }
@@ -194,7 +199,7 @@
 
 /* ─── Cards ────────────────────────────────────────────────────────── */
 .tui-card {
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--tui-border-subtle);
   border-radius: var(--tui-radius-md);
   padding: var(--tui-space-lg);
@@ -202,7 +207,7 @@
 }
 
 .tui-card:hover {
-  background: rgba(255, 255, 255, 0.05);
+  background: rgba(255, 255, 255, 0.04);
   border-color: var(--tui-border-medium);
 }
 
@@ -216,7 +221,7 @@
 .tui-card-icon {
   width: 36px;
   height: 36px;
-  background: rgba(255, 255, 255, 0.06);
+  background: rgba(255, 255, 255, 0.04);
   border-radius: var(--tui-radius-md);
   display: flex;
   align-items: center;
@@ -340,28 +345,87 @@
 
 /* ─── Select / Dropdown ────────────────────────────────────────────── */
 .tui-select {
-  padding: var(--tui-space-sm) var(--tui-space-md);
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid var(--tui-border-subtle);
-  border-radius: var(--tui-radius-sm);
-  color: var(--tui-text-primary);
+  padding: var(--tui-space-sm, 8px) 28px var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: var(--tui-radius-sm, 4px);
+  color: var(--tui-text-primary, #fff);
   font-size: 13px;
   font-family: inherit;
   min-width: 150px;
   cursor: pointer;
-  transition: all var(--tui-transition-fast);
-  appearance: auto;
+  transition: all var(--tui-transition-fast, 150ms ease);
+  color-scheme: dark;
+  appearance: none;
+  -webkit-appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg width='10' height='6' viewBox='0 0 10 6' fill='none' xmlns='http://www.w3.org/2000/svg'%3E%3Cpath d='M1 1L5 5L9 1' stroke='rgba(255,255,255,0.6)' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 10px 6px;
 }
 
 .tui-select:hover {
-  background: rgba(255, 255, 255, 0.08);
-  border-color: var(--tui-border-medium);
+  background-color: rgba(255, 255, 255, 0.06);
+  border-color: var(--tui-border-medium, rgba(255, 255, 255, 0.1));
 }
 
 .tui-select:focus {
   outline: none;
-  border-color: var(--tui-accent-primary);
-  box-shadow: 0 0 0 2px var(--tui-accent-subtle);
+  border-color: var(--tui-accent-primary, #0067C0);
+  box-shadow: 0 0 0 2px var(--tui-accent-subtle, rgba(0, 103, 192, 0.15));
+}
+
+.tui-select option {
+  background: #2d2d2d;
+  color: #ffffff;
+  padding: 6px 12px;
+}
+
+/* ─── Custom Select (TuiDropdown-backed) ──────────────────────────── */
+.tui-custom-select {
+  position: relative;
+  display: inline-block;
+  min-width: 150px;
+}
+
+.tui-custom-select-trigger {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--tui-space-sm, 8px);
+  padding: var(--tui-space-sm, 8px) 28px var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: var(--tui-radius-sm, 4px);
+  color: var(--tui-text-primary, #fff);
+  font-size: 13px;
+  font-family: inherit;
+  min-width: 150px;
+  cursor: pointer;
+  transition: all var(--tui-transition-fast, 150ms ease);
+  user-select: none;
+  text-align: left;
+}
+
+.tui-custom-select-trigger:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+}
+
+.tui-custom-select-trigger:focus {
+  outline: none;
+  border-color: var(--tui-accent-primary, #0067C0);
+  box-shadow: 0 0 0 2px var(--tui-accent-subtle, rgba(0, 103, 192, 0.15));
+}
+
+.tui-custom-select-arrow {
+  position: absolute;
+  right: 10px;
+  top: 50%;
+  transform: translateY(-50%);
+  pointer-events: none;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  transition: transform var(--tui-transition-fast, 150ms ease);
 }
 
 /* ─── Input ────────────────────────────────────────────────────────── */
@@ -393,7 +457,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--tui-space-sm) var(--tui-space-md);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.02);
   border-bottom: 1px solid var(--tui-border-subtle);
   flex-shrink: 0;
 }
@@ -460,8 +524,8 @@
 
 /* ─── Scrollbar ────────────────────────────────────────────────────── */
 .tui-scrollbar::-webkit-scrollbar {
-  width: 8px;
-  height: 8px;
+  width: 6px;
+  height: 6px;
 }
 
 .tui-scrollbar::-webkit-scrollbar-track {
@@ -469,12 +533,32 @@
 }
 
 .tui-scrollbar::-webkit-scrollbar-thumb {
-  background: var(--tui-border-medium);
-  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 3px;
 }
 
 .tui-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: var(--tui-border-strong);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.tui-scrollbar::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+/* ─── xterm.js Safety ──────────────────────────────────────────────── */
+/* Ensure xterm's hidden helper textarea never becomes visible inside
+   shadow DOMs where inherited styles could override xterm's inline
+   positioning. This prevents a "visible small text area" artifact. */
+.xterm-helper-textarea {
+  position: absolute !important;
+  opacity: 0 !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  padding: 0 !important;
+  resize: none !important;
+  z-index: -1 !important;
 }
 
 /* ─── Layout Helpers ───────────────────────────────────────────────── */
@@ -542,7 +626,7 @@
   align-items: center;
   justify-content: space-between;
   padding: var(--tui-space-md);
-  background: rgba(255, 255, 255, 0.03);
+  background: rgba(255, 255, 255, 0.025);
   border: 1px solid var(--tui-border-subtle);
   border-radius: var(--tui-radius-md);
   margin-bottom: var(--tui-space-sm);
@@ -585,4 +669,780 @@
 .tui-empty-text {
   font-size: 14px;
   margin-bottom: var(--tui-space-md);
+}
+
+/* ─── Modal (Win11 ContentDialog) ──────────────────────────────────── */
+.tui-modal-backdrop {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
+  z-index: 1000;
+  align-items: center;
+  justify-content: center;
+}
+
+.tui-modal-backdrop.tui-modal-open {
+  display: flex;
+}
+
+.tui-modal {
+  background: #2B2B2B;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 8px 16px rgba(0, 0, 0, 0.14),
+    0 24px 48px rgba(0, 0, 0, 0.26);
+  min-width: 340px;
+  max-width: 420px;
+  max-height: 80%;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: tui-modal-in 167ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes tui-modal-in {
+  from { opacity: 0; transform: scale(0.975) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+/* Title area */
+.tui-modal-header {
+  padding: 20px 24px 0 24px;
+  border-bottom: none;
+}
+
+.tui-modal-title {
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 18px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.01em;
+  line-height: 1.2;
+  margin: 0;
+}
+
+.tui-modal-body {
+  padding: 12px 24px 16px 24px;
+  color: rgba(255, 255, 255, 0.7);
+  overflow-y: auto;
+  flex: 1;
+}
+
+.tui-modal-message {
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  color: rgba(255, 255, 255, 0.7);
+  line-height: 1.45;
+  margin-bottom: 12px;
+  word-break: break-word;
+}
+
+.tui-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  font-size: 13.5px;
+  color: rgba(255, 255, 255, 0.9);
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.tui-modal-input:focus {
+  outline: none;
+  border-bottom-color: #60CDFF;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tui-modal-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Footer — darker bottom band */
+.tui-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 14px 24px 18px 24px;
+  background: #202020;
+  border-top: none;
+}
+
+/* Win11 dialog buttons */
+.tui-modal-btn {
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 13.5px;
+  font-weight: 400;
+  padding: 6px 24px;
+  min-width: 80px;
+  min-height: 30px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 80ms ease;
+  letter-spacing: 0.01em;
+  text-align: center;
+}
+
+.tui-modal-btn-primary {
+  background: #0078D4;
+  color: #fff;
+  border: 1px solid transparent;
+}
+
+.tui-modal-btn-primary:hover {
+  background: #1a86d9;
+}
+
+.tui-modal-btn-primary:active {
+  background: #006abe;
+  transform: scale(0.98);
+}
+
+.tui-modal-btn-secondary {
+  background: #2D2D2D;
+  color: rgba(255, 255, 255, 0.6);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.tui-modal-btn-secondary:hover {
+  background: #333333;
+  color: rgba(255, 255, 255, 0.8);
+}
+
+.tui-modal-btn-secondary:active {
+  background: #292929;
+  transform: scale(0.98);
+}
+
+/* ─── Tabs ──────────────────────────────────────────────────────────── */
+.tui-tabs {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.tui-tabs-bar {
+  display: flex;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.08));
+  gap: 2px;
+  padding: 0 var(--tui-space-md, 12px);
+  flex-shrink: 0;
+}
+
+.tui-tabs-btn {
+  padding: var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--tui-transition-fast, 150ms ease);
+  white-space: nowrap;
+}
+
+.tui-tabs-btn:hover {
+  color: var(--tui-text-primary, #fff);
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.tui-tabs-btn.active {
+  color: var(--tui-accent-secondary, #60cdff);
+  border-bottom-color: var(--tui-accent-primary, #0067C0);
+}
+
+.tui-tabs-panels {
+  flex: 1;
+  overflow: auto;
+}
+
+.tui-tabs-panel {
+  display: none;
+  padding: var(--tui-space-lg, 16px);
+}
+
+.tui-tabs-panel.active {
+  display: block;
+}
+
+/* ─── Data Table ───────────────────────────────────────────────────── */
+.tui-table-container {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.tui-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.tui-table-th {
+  padding: var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  text-align: left;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  border-bottom: 1px solid var(--tui-border-medium, rgba(255, 255, 255, 0.12));
+  white-space: nowrap;
+  user-select: none;
+}
+
+.tui-table-sortable {
+  cursor: pointer;
+}
+
+.tui-table-sortable:hover {
+  color: var(--tui-text-primary, #fff);
+}
+
+.tui-table-sort-asc::after {
+  content: ' ▲';
+  font-size: 10px;
+}
+
+.tui-table-sort-desc::after {
+  content: ' ▼';
+  font-size: 10px;
+}
+
+.tui-table-check {
+  width: 40px;
+  text-align: center;
+}
+
+.tui-table-td {
+  padding: var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.08));
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.tui-table-row:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+.tui-table-clickable {
+  cursor: pointer;
+}
+
+.tui-table-checkbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--tui-accent-primary, #0067C0);
+  cursor: pointer;
+}
+
+.tui-table-empty {
+  text-align: center;
+  padding: var(--tui-space-xl, 24px);
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+}
+
+/* ─── Dropdown / Context Menu ──────────────────────────────────────── */
+.tui-dropdown {
+  display: none;
+  position: absolute;
+  min-width: 180px;
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.92));
+  backdrop-filter: blur(40px) saturate(180%);
+  -webkit-backdrop-filter: blur(40px) saturate(180%);
+  border: 1px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  border-top-color: var(--tui-border-strong, rgba(255, 255, 255, 0.16));
+  border-radius: var(--tui-radius-md, 8px);
+  box-shadow:
+    0 8px 32px rgba(0, 0, 0, 0.36),
+    0 0 0 1px rgba(255, 255, 255, 0.04);
+  padding: var(--tui-space-xs, 4px) 0;
+  z-index: 900;
+  animation: tui-dropdown-in 160ms cubic-bezier(0.1, 0.9, 0.2, 1);
+  transform-origin: top left;
+}
+
+.tui-dropdown-open {
+  display: block;
+}
+
+@keyframes tui-dropdown-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.tui-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-sm, 8px);
+  padding: 6px var(--tui-space-lg, 16px);
+  margin: 0 var(--tui-space-xs, 4px);
+  width: calc(100% - var(--tui-space-xs, 4px) * 2);
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--tui-text-primary, #fff);
+  background: transparent;
+  border: none;
+  border-radius: var(--tui-radius-sm, 4px);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--tui-transition-fast, 150ms ease);
+  outline: none;
+}
+
+.tui-dropdown-item:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.07));
+}
+
+.tui-dropdown-item:active,
+.tui-dropdown-item:focus-visible {
+  background: var(--tui-bg-active, rgba(255, 255, 255, 0.1));
+}
+
+.tui-dropdown-item:focus-visible {
+  box-shadow: 0 0 0 1px var(--tui-accent-secondary, #60CDFF);
+}
+
+.tui-dropdown-item-danger {
+  color: var(--tui-error-text, #ff6b6b);
+}
+
+.tui-dropdown-item-danger:hover {
+  background: rgba(232, 17, 35, 0.12);
+}
+
+.tui-dropdown-item-danger:active {
+  background: rgba(232, 17, 35, 0.2);
+}
+
+.tui-dropdown-icon {
+  display: flex;
+  align-items: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+}
+
+.tui-dropdown-separator {
+  height: 1px;
+  background: var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  margin: var(--tui-space-xs, 4px) 0;
+}
+
+/* ─── Toast Notifications ──────────────────────────────────────────── */
+.tui-toast-container {
+  position: absolute;
+  z-index: 1100;
+  display: flex;
+  flex-direction: column;
+  gap: var(--tui-space-sm, 8px);
+  pointer-events: none;
+  padding: var(--tui-space-lg, 16px);
+}
+
+.tui-toast-top-right    { top: 0; right: 0; align-items: flex-end; }
+.tui-toast-top-left     { top: 0; left: 0; align-items: flex-start; }
+.tui-toast-bottom-right { bottom: 0; right: 0; align-items: flex-end; }
+.tui-toast-bottom-left  { bottom: 0; left: 0; align-items: flex-start; }
+
+.tui-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-sm, 8px);
+  padding: var(--tui-space-sm, 8px) var(--tui-space-lg, 16px);
+  background: rgba(28, 28, 28, 0.96);
+  border: 1px solid var(--tui-border-medium);
+  border-radius: var(--tui-radius-md);
+  box-shadow: 0 2px 12px rgba(0, 0, 0, 0.3);
+  font-size: 13px;
+  color: var(--tui-text-primary, #fff);
+  pointer-events: auto;
+  transform: translateX(100%);
+  opacity: 0;
+  transition: all 300ms ease-out;
+  max-width: 360px;
+}
+
+.tui-toast-visible {
+  transform: translateX(0);
+  opacity: 1;
+}
+
+.tui-toast-exit {
+  transform: translateX(100%);
+  opacity: 0;
+}
+
+.tui-toast-success { border-left: 3px solid var(--tui-success, #00b294); }
+.tui-toast-error   { border-left: 3px solid var(--tui-error, #e81123); }
+.tui-toast-warning { border-left: 3px solid var(--tui-warning, #f2c94c); }
+.tui-toast-info    { border-left: 3px solid var(--tui-info, #60cdff); }
+
+.tui-toast-success .tui-toast-icon { color: var(--tui-success, #00b294); }
+.tui-toast-error .tui-toast-icon   { color: var(--tui-error, #e81123); }
+.tui-toast-warning .tui-toast-icon { color: var(--tui-warning, #f2c94c); }
+.tui-toast-info .tui-toast-icon    { color: var(--tui-info, #60cdff); }
+
+.tui-toast-icon {
+  flex-shrink: 0;
+  display: flex;
+}
+
+.tui-toast-message {
+  flex: 1;
+}
+
+.tui-toast-close {
+  flex-shrink: 0;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  border-radius: var(--tui-radius-sm, 4px);
+}
+
+.tui-toast-close:hover {
+  color: var(--tui-text-primary, #fff);
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.08));
+}
+
+/* ─── Accordion ─────────────────────────────────────────────────────── */
+.tui-accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.tui-accordion-section {
+  border: 1px solid var(--tui-border-subtle);
+  border-radius: var(--tui-radius-md);
+  overflow: hidden;
+}
+
+.tui-accordion-header {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--tui-space-md, 12px) var(--tui-space-lg, 16px);
+  background: rgba(255, 255, 255, 0.02);
+  font-size: 14px;
+  font-weight: 500;
+  font-family: inherit;
+  color: var(--tui-text-primary, #fff);
+  border: none;
+  cursor: pointer;
+  transition: background var(--tui-transition-fast, 150ms ease);
+}
+
+.tui-accordion-header:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tui-accordion-arrow {
+  transition: transform var(--tui-transition-fast, 150ms ease);
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+}
+
+.tui-accordion-open .tui-accordion-arrow {
+  transform: rotate(180deg);
+}
+
+.tui-accordion-body {
+  display: none;
+  padding: var(--tui-space-lg, 16px);
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  border-top: 1px solid var(--tui-border-subtle);
+}
+
+.tui-accordion-open .tui-accordion-body {
+  display: block;
+}
+
+/* ─── Sidebar Navigation (Windows 11 Fluent Design) ────────────────── */
+
+/*
+ * Reusable Windows 11-style sidebar navigation.
+ * Used via PLUGIN_API.ui.sidebarNav({ items, ... })
+ *
+ * Layout:
+ *   .tui-sidebar-nav          - Root <nav> container
+ *     .tui-sidebar-search     - Optional search bar
+ *     .tui-sidebar-items      - Scrollable item list
+ *       .tui-sidebar-item     - Individual nav item (button)
+ *       .tui-sidebar-divider  - Section divider
+ */
+
+.tui-sidebar-nav {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  width: 240px;
+  background: rgba(255, 255, 255, 0.02);
+  border-right: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+/* ── Search Bar ──────────────────────────────────────────────────────── */
+.tui-sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-sm, 8px);
+  margin: var(--tui-space-lg, 16px) var(--tui-space-lg, 16px) var(--tui-space-sm, 8px);
+  padding: 6px 10px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-bottom: 2px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: var(--tui-radius-sm, 4px);
+  transition: all var(--tui-transition-fast, 150ms ease);
+}
+
+.tui-sidebar-search:focus-within {
+  border-bottom-color: var(--tui-accent-primary, #0067C0);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.tui-sidebar-search-icon {
+  display: flex;
+  align-items: center;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  flex-shrink: 0;
+}
+
+.tui-sidebar-search-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  outline: none;
+  font-size: 13px;
+  font-family: inherit;
+  color: var(--tui-text-primary, #ffffff);
+  min-width: 0;
+}
+
+.tui-sidebar-search-input::placeholder {
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.4));
+}
+
+/* ── Items Container ─────────────────────────────────────────────────── */
+.tui-sidebar-items {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--tui-space-sm, 8px) var(--tui-space-sm, 8px) var(--tui-space-lg, 16px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(255, 255, 255, 0.08) transparent;
+}
+
+.tui-sidebar-items::-webkit-scrollbar {
+  width: 4px;
+}
+
+.tui-sidebar-items::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.tui-sidebar-items::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+}
+
+.tui-sidebar-items::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.14);
+}
+
+/* ── Navigation Item ─────────────────────────────────────────────────── */
+.tui-sidebar-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  border: none;
+  border-radius: var(--tui-radius-sm, 4px);
+  background: transparent;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  font-size: 13px;
+  font-weight: 400;
+  font-family: inherit;
+  line-height: 1.3;
+  text-align: left;
+  cursor: pointer;
+  transition: background var(--tui-transition-fast, 150ms ease),
+              color var(--tui-transition-fast, 150ms ease);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tui-sidebar-item:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.06));
+  color: var(--tui-text-primary, #ffffff);
+}
+
+.tui-sidebar-item:active {
+  background: var(--tui-bg-active, rgba(255, 255, 255, 0.08));
+}
+
+.tui-sidebar-item.active {
+  background: var(--tui-bg-selected, rgba(255, 255, 255, 0.08));
+  color: var(--tui-text-primary, #ffffff);
+  font-weight: 600;
+}
+
+.tui-sidebar-item.active:hover {
+  background: var(--tui-bg-active, rgba(255, 255, 255, 0.1));
+}
+
+/* ── Item Icon ────────────────────────────────────────────────────────── */
+.tui-sidebar-item-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.tui-sidebar-item-icon svg {
+  width: 16px;
+  height: 16px;
+}
+
+.tui-sidebar-item.active .tui-sidebar-item-icon {
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+/* ── Item Label ───────────────────────────────────────────────────────── */
+.tui-sidebar-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ── Section Divider ──────────────────────────────────────────────────── */
+.tui-sidebar-divider {
+  height: 1px;
+  background: var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  margin: var(--tui-space-sm, 8px) var(--tui-space-sm, 8px);
+}
+
+/* ── Section Label ────────────────────────────────────────────────────── */
+.tui-sidebar-section-label {
+  padding: var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.4));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: var(--tui-space-xs, 4px);
+}
+
+/* ─── Radio Group ───────────────────────────────────────────────────── */
+.tui-radio-group {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-lg, 16px);
+}
+
+.tui-radio-group-vertical {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: var(--tui-space-sm, 8px);
+}
+
+.tui-radio {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-sm, 8px);
+  font-size: 13px;
+  color: var(--tui-text-primary, #ffffff);
+  cursor: pointer;
+  user-select: none;
+  transition: color var(--tui-transition-fast, 150ms ease);
+  line-height: 1;
+}
+
+.tui-radio:hover {
+  color: var(--tui-accent-secondary, #60cdff);
+}
+
+.tui-radio-disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+.tui-radio-input {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  border-radius: 50%;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+  position: relative;
+  top: 4px;
+  margin: 0;
+  flex-shrink: 0;
+  box-sizing: border-box;
+  background: transparent;
+  transition: border-color var(--tui-transition-fast, 150ms ease),
+              box-shadow var(--tui-transition-fast, 150ms ease);
+}
+
+.tui-radio-input:hover {
+  border-color: var(--tui-border-strong, rgba(255, 255, 255, 0.16));
+}
+
+.tui-radio-input:checked {
+  border-color: var(--tui-accent-primary, #0067C0);
+}
+
+.tui-radio-input:checked::after {
+  content: '';
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 6px;
+  height: 6px;
+  background: var(--tui-accent-primary, #0067C0);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+}
+
+.tui-radio-input:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 2px var(--tui-accent-subtle, rgba(0, 103, 192, 0.15));
+}
+
+.tui-radio-label {
+  font-family: inherit;
+  line-height: 1;
+  display: inline-block;
 }

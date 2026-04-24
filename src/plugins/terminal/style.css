@@ -6,6 +6,10 @@
   display: flex;
   flex-direction: column;
   background: #0c0c0c;
+  font-family: 'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace;
+  font-size: 13px;
+  line-height: 1.4;
+  color: #cccccc;
 }
 
 /* Override toolbar for terminal look */
@@ -28,12 +32,28 @@
 
 /* Make xterm fill its container */
 .terminal-body .xterm {
+  width: 100%;
   height: 100%;
   padding: 0 8px;
 }
 
-/* Remove default xterm viewport background and forced scroll */
+/* Ensure xterm's hidden helper textarea stays invisible */
+.terminal-body .xterm-helper-textarea {
+  position: absolute !important;
+  opacity: 0 !important;
+  left: -9999px !important;
+  width: 0 !important;
+  height: 0 !important;
+  border: none !important;
+  padding: 0 !important;
+  resize: none !important;
+  z-index: -1 !important;
+}
+
+/* Remove default xterm viewport background but allow native scrolling */
 .terminal-body .xterm-viewport {
   background-color: transparent !important;
-  overflow-y: hidden !important;
+  /* Do NOT set overflow-y: hidden — xterm needs native scroll to show
+     the full scrollback buffer.  The viewport's height is managed by
+     FitAddon which keeps it in sync with the container. */
 }

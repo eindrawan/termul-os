@@ -668,6 +668,149 @@ class PluginLoader {
           }
           return el;
         },
+
+        /* ─── Complex (Stateful) Component Factories ─────────────────── */
+
+        /**
+         * Create a modal dialog.
+         * @param {Object} opts
+         * @param {string} [opts.title] - Modal title
+         * @param {string} [opts.content] - HTML body content
+         * @param {Array<{label:string,variant?:string,onClick?:Function}>} [opts.buttons]
+         * @param {boolean} [opts.closeOnBackdrop=true]
+         * @param {boolean} [opts.closeOnEscape=true]
+         * @param {Function} [opts.onClose]
+         * @returns {TuiModal}
+         */
+        modal(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiModal(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create a tabbed panel container.
+         * @param {Object} opts
+         * @param {Array<{id:string, label:string, content:string}>} opts.items
+         * @param {string} [opts.activeTab]
+         * @param {Function} [opts.onSwitch]
+         * @returns {TuiTabs}
+         */
+        tabs(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiTabs(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create a data table.
+         * @param {Object} opts
+         * @param {Array<{key:string,label:string,sortable?:boolean,render?:Function}>} opts.columns
+         * @param {Array<Object>} [opts.data]
+         * @param {boolean} [opts.selectable=false]
+         * @param {Function} [opts.onRowClick]
+         * @param {Function} [opts.onSelectionChange]
+         * @param {string} [opts.emptyText]
+         * @returns {TuiDataTable}
+         */
+        dataTable(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiDataTable(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create a dropdown/context menu.
+         * @param {Object} opts
+         * @param {HTMLElement} opts.trigger - Anchor element
+         * @param {Array<{label:string,icon?:string,variant?:string,onClick?:Function,separator?:boolean}>} opts.items
+         * @param {boolean} [opts.closeOnClick=true]
+         * @returns {TuiDropdown}
+         */
+        dropdown(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiDropdown(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create a toast notification system.
+         * @param {Object} opts
+         * @param {string} [opts.position='bottom-right']
+         * @param {number} [opts.defaultDuration=4000]
+         * @param {number} [opts.maxVisible=5]
+         * @returns {TuiToast}
+         */
+        toast(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiToast(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create an accordion / collapsible sections.
+         * @param {Object} opts
+         * @param {Array<{title:string,content:string,open?:boolean}>} opts.items
+         * @param {boolean} [opts.multiple=false]
+         * @param {Function} [opts.onToggle]
+         * @returns {TuiAccordion}
+         */
+        accordion(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiAccordion(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create a Windows 11-style sidebar navigation.
+         * @param {Object} opts
+         * @param {Array<{id:string, label:string, icon?:string, section?:string, sectionLabel?:string}>} opts.items
+         *   Navigation items. Items with different `section` values get separated by dividers.
+         * @param {string} [opts.activeItem] - Initially active item id (defaults to first)
+         * @param {boolean} [opts.searchable=false] - Show search input at top
+         * @param {string} [opts.searchPlaceholder='Search...'] - Placeholder for search input
+         * @param {Function} [opts.onNavigate] - Called with (itemId) when item is clicked
+         * @param {Function} [opts.onSearch] - Called with (query) when search text changes
+         * @param {number} [opts.width=240] - Sidebar width in pixels
+         * @returns {TuiSidebarNav}
+         */
+        sidebarNav(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiSidebarNav(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
+
+        /**
+         * Create a radio button group.
+         * @param {Object} opts
+         * @param {string} [opts.name] - Radio group name (for native grouping)
+         * @param {Array<{value: string, label: string, disabled?: boolean}>} opts.options
+         * @param {string} [opts.value] - Initially selected value
+         * @param {'horizontal'|'vertical'} [opts.direction='horizontal'] - Layout direction
+         * @param {Function} [opts.onChange] - Called with (value) when selection changes
+         * @returns {TuiRadioGroup}
+         */
+        radioGroup(opts = {}) {
+          const instance = window.PluginLoader.instances.get(windowId);
+          const shadow = instance ? instance.shadow : null;
+          const comp = new window.TuiRadioGroup(shadow, opts);
+          if (instance) instance._components.push(comp);
+          return comp;
+        },
       },
     };
   }
@@ -719,6 +862,9 @@ class PluginInstance {
 
     /** Track DOM event listeners added by plugin for auto-cleanup */
     this._listeners = [];
+
+    /** Track TuiComponent instances for auto-destroy on unmount */
+    this._components = [];
   }
 
   /**
@@ -739,7 +885,10 @@ class PluginInstance {
       this.shadow.appendChild(sharedStyle);
     }
 
-    // Inject xterm.css into shadow DOM if available (needed by terminal plugin)
+    // Inject xterm.js CSS into shadow DOM so the terminal renders correctly.
+    // Without this, internal xterm elements like .xterm-char-measure-element
+    // become visible (showing measurement characters like "$$$$$" at the top)
+    // and other critical layout rules (scrollbar, viewport, rows) are missing.
     const xtermCSS = window.PluginLoader._xtermCSS;
     if (xtermCSS) {
       const xtermStyle = document.createElement('style');
@@ -872,6 +1021,13 @@ class PluginInstance {
       try { this._lifecycle.onUnmount(); }
       catch (e) { console.error(`[Plugin] onUnmount error in "${this.dirName}":`, e); }
     }
+
+    // Destroy all tracked TuiComponent instances
+    for (const comp of this._components) {
+      try { comp.destroy(); }
+      catch (e) { console.error(`[Plugin] component destroy error:`, e); }
+    }
+    this._components = [];
 
     // Clear tracked timers
     for (const id of this._timers) clearTimeout(id);

@@ -1,0 +1,634 @@
+/* ─── File Transfer Plugin — WinSCP-inspired dual pane ──────────────── */
+
+.ft-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--tui-bg-surface, #0f0f0f);
+  color: var(--tui-text-primary, #e0e0e0);
+  font-family: var(--tui-font-family);
+  overflow: hidden;
+}
+
+/* ─── Toolbar ──────────────────────────────────────────────────────── */
+.ft-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--tui-space-sm, 8px) var(--tui-space-md, 12px);
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  flex-shrink: 0;
+}
+
+.ft-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-sm, 8px);
+}
+
+.ft-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: var(--tui-space-xs, 4px);
+}
+
+.ft-toolbar-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tui-text-primary);
+}
+
+.ft-btn {
+  font-size: 12px;
+  gap: 4px;
+  padding: 4px 10px;
+}
+
+.ft-btn-danger {
+  color: var(--tui-error-text, #ff6b6b);
+}
+
+.ft-btn-danger:hover:not(:disabled) {
+  background: rgba(232, 17, 35, 0.1);
+  color: var(--tui-error-text, #ff6b6b);
+}
+
+.ft-toolbar-sep {
+  width: 1px;
+  height: 20px;
+  background: var(--tui-border-medium, rgba(255,255,255,0.1));
+  margin: 0 4px;
+  flex-shrink: 0;
+}
+
+/* ─── Dual Panes ───────────────────────────────────────────────────── */
+.ft-panes {
+  flex: 1;
+  display: flex;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.ft-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.ft-pane.ft-active {
+  outline: 1px solid rgba(0, 103, 192, 0.25);
+  outline-offset: -1px;
+}
+
+/* ─── Pane Divider ──────────────────────────────────────────────────── */
+.ft-pane-divider {
+  width: 1px;
+  flex-shrink: 0;
+  background: var(--tui-border-medium, rgba(255,255,255,0.1));
+}
+
+/* ─── Pane Header ──────────────────────────────────────────────────── */
+.ft-pane-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--tui-space-xs, 4px);
+  padding: var(--tui-space-sm, 8px) var(--tui-space-sm, 8px);
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  flex-shrink: 0;
+}
+
+.ft-pane-label {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ft-pane-label svg {
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+.ft-path-bar {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ft-path-input {
+  flex: 1;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  border-radius: var(--tui-radius-sm, 4px);
+  font-size: 12px;
+  font-family: var(--tui-font-mono, monospace);
+  color: var(--tui-text-primary);
+  transition: all 150ms ease;
+}
+
+.ft-path-input:focus {
+  outline: none;
+  border-bottom-color: var(--tui-accent-primary, #0067C0);
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ft-path-input::placeholder {
+  color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+}
+
+.ft-path-go,
+.ft-path-up,
+.ft-path-home {
+  width: 26px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+/* ─── File List ────────────────────────────────────────────────────── */
+.ft-file-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.ft-file-header {
+  display: flex;
+  align-items: center;
+  padding: 4px 12px;
+  background: var(--tui-bg-surface, #0f0f0f);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  user-select: none;
+}
+
+/* ─── Sortable Column Headers ─────────────────────────────────────── */
+.ft-sortable {
+  cursor: pointer;
+  transition: color 120ms ease;
+  position: relative;
+  padding-right: 14px;
+}
+
+.ft-sortable:hover {
+  color: var(--tui-text-primary, #fff);
+}
+
+.ft-sortable::after {
+  content: '';
+  position: absolute;
+  right: 0;
+  top: 50%;
+  transform: translateY(-50%);
+  border-left: 3px solid transparent;
+  border-right: 3px solid transparent;
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.ft-sortable.ft-sort-asc::after {
+  content: '';
+  border-bottom: 4px solid var(--tui-accent-secondary, #60CDFF);
+  opacity: 1;
+}
+
+.ft-sortable.ft-sort-desc::after {
+  content: '';
+  border-top: 4px solid var(--tui-accent-secondary, #60CDFF);
+  opacity: 1;
+}
+
+.ft-sortable.ft-sort-active {
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+.ft-file-body {
+  min-height: 100%;
+  position: relative;
+  z-index: 1;
+}
+
+.ft-col-name { flex: 1; min-width: 0; }
+.ft-col-size { width: 80px; text-align: right; flex-shrink: 0; }
+.ft-col-date { width: 130px; text-align: right; flex-shrink: 0; }
+
+/* ─── File Row ─────────────────────────────────────────────────────── */
+.ft-row {
+  display: flex;
+  align-items: center;
+  padding: 3px 12px;
+  font-size: 12px;
+  cursor: pointer;
+  border-bottom: 1px solid transparent;
+  transition: background 120ms ease;
+  user-select: none;
+}
+
+.ft-row:hover {
+  background: var(--tui-bg-hover, rgba(255,255,255,0.07));
+}
+
+.ft-row.ft-selected {
+  background: var(--tui-accent-subtle, rgba(0,103,192,0.15));
+  border-bottom-color: rgba(0, 103, 192, 0.1);
+}
+
+.ft-row.ft-selected:hover {
+  background: rgba(0, 103, 192, 0.2);
+}
+
+.ft-row.ft-parent-dir {
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-row-name {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+
+.ft-row-name-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ft-row-size {
+  width: 80px;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  font-family: var(--tui-font-mono, monospace);
+  font-size: 11px;
+}
+
+.ft-row-date {
+  width: 130px;
+  text-align: right;
+  flex-shrink: 0;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  font-size: 11px;
+}
+
+/* ─── File type icons ──────────────────────────────────────────────── */
+.ft-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ft-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ft-icon-folder {
+  color: #FFB900;
+}
+
+.ft-icon-file {
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-icon-parent {
+  color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+}
+
+/* ─── Loading / Empty States ───────────────────────────────────────── */
+.ft-loading,
+.ft-empty,
+.ft-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--tui-space-sm, 8px);
+  padding: var(--tui-space-xl, 24px);
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  font-size: 13px;
+  min-height: 120px;
+}
+
+.ft-error {
+  color: var(--tui-error-text, #ff6b6b);
+}
+
+.ft-loading .tui-spinner {
+  width: 24px;
+  height: 24px;
+  border-width: 2px;
+}
+
+/* ─── Pane Status Bar ──────────────────────────────────────────────── */
+.ft-pane-status {
+  padding: 3px 12px;
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  background: rgba(255, 255, 255, 0.015);
+  border-top: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  flex-shrink: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* ─── Transfer Queue ───────────────────────────────────────────────── */
+.ft-queue-section {
+  flex-shrink: 0;
+  border-top: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.ft-queue-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 12px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 120ms ease;
+}
+
+.ft-queue-header:hover {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.ft-queue-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ft-queue-title svg {
+  transition: transform 150ms ease;
+}
+
+.ft-queue-section.ft-collapsed .ft-queue-title svg {
+  transform: rotate(-90deg);
+}
+
+.ft-queue-count {
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-queue-list {
+  max-height: 120px;
+  overflow-y: auto;
+  padding: 0 12px 8px;
+}
+
+.ft-queue-section.ft-collapsed .ft-queue-list {
+  display: none;
+}
+
+.ft-queue-empty {
+  text-align: center;
+  padding: 8px;
+  font-size: 11px;
+  color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+}
+
+/* ─── Queue Item ───────────────────────────────────────────────────── */
+.ft-queue-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 0;
+  font-size: 11px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.04));
+}
+
+.ft-queue-item:last-child {
+  border-bottom: none;
+}
+
+.ft-queue-item-icon {
+  flex-shrink: 0;
+  display: flex;
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+.ft-queue-item-icon.ft-icon-upload {
+  color: var(--tui-success, #00b294);
+}
+
+.ft-queue-item-icon.ft-icon-download {
+  color: var(--tui-info, #60cdff);
+}
+
+.ft-queue-item-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ft-queue-item-name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--tui-text-primary);
+}
+
+.ft-queue-item-progress {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.ft-queue-item-bar {
+  flex: 1;
+  height: 3px;
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 2px;
+  overflow: hidden;
+}
+
+.ft-queue-item-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, var(--tui-accent-primary, #0067C0), var(--tui-accent-secondary, #60CDFF));
+  border-radius: 2px;
+  transition: width 200ms ease-out;
+}
+
+.ft-queue-item-bar-fill.ft-complete {
+  background: var(--tui-success, #00b294);
+}
+
+.ft-queue-item-bar-fill.ft-error {
+  background: var(--tui-error, #e81123);
+}
+
+.ft-queue-item-percent {
+  font-size: 10px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  font-family: var(--tui-font-mono, monospace);
+  min-width: 32px;
+  text-align: right;
+}
+
+.ft-queue-item-status {
+  font-size: 10px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-queue-item-status.ft-complete {
+  color: var(--tui-success, #00b294);
+}
+
+.ft-queue-item-status.ft-error {
+  color: var(--tui-error-text, #ff6b6b);
+}
+
+/* ─── Context Menu (Windows 11 Acrylic) ─────────────────────────────── */
+.ft-ctx {
+  display: none;
+  position: absolute;
+  z-index: 2000;
+  min-width: 200px;
+  padding: 4px;
+  background: rgba(44, 44, 44, 0.82);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.12),
+    0 8px 28px rgba(0, 0, 0, 0.36),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: ft-ctx-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+.ft-ctx.ft-ctx-open {
+  display: block;
+}
+
+@keyframes ft-ctx-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96) translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.ft-ctx-item {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 6px 12px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.88);
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, -apple-system, sans-serif;
+  font-size: 12.5px;
+  font-weight: 400;
+  cursor: pointer;
+  transition: background 80ms ease;
+  text-align: left;
+  white-space: nowrap;
+  line-height: 1;
+  letter-spacing: 0.01em;
+}
+
+.ft-ctx-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ft-ctx-item:active {
+  background: rgba(255, 255, 255, 0.03);
+  transform: scale(0.99);
+}
+
+.ft-ctx-item:disabled {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
+
+.ft-ctx-item-danger {
+  color: #e81123;
+}
+
+.ft-ctx-item-danger:hover {
+  background: rgba(232, 17, 35, 0.08);
+}
+
+.ft-ctx-item-danger:active {
+  background: rgba(232, 17, 35, 0.04);
+}
+
+.ft-ctx-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+}
+
+.ft-ctx-text {
+  flex: 1;
+}
+
+.ft-ctx-shortcut {
+  font-size: 11px;
+  color: rgba(255, 255, 255, 0.35);
+  font-family: "Segoe UI Variable", "Segoe UI", system-ui, sans-serif;
+  margin-left: 16px;
+}
+
+.ft-ctx-sep {
+  height: 1px;
+  margin: 4px 8px;
+  background: rgba(255, 255, 255, 0.06);
+}
+
+/* ─── Multi-select visual hint ─────────────────────────────────────── */
+.ft-row.ft-selected .ft-row-name {
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+/* ─── Responsive adjustments ───────────────────────────────────────── */
+@media (max-width: 700px) {
+  .ft-btn span {
+    display: none;
+  }
+  .ft-col-date {
+    display: none;
+  }
+  .ft-modal {
+    min-width: 260px;
+  }
+}

@@ -36,6 +36,50 @@ contextBridge.exposeInMainWorld('termulAPI', {
     removeShellClosedListener: () => {
       ipcRenderer.removeAllListeners('ssh:shell-closed');
     },
+    // Connection lifecycle events (dropped, error, closed)
+    onConnectionClosed: (callback) => {
+      ipcRenderer.on('ssh:connection-closed', (event, data) => callback(data));
+    },
+    onConnectionError: (callback) => {
+      ipcRenderer.on('ssh:connection-error', (event, data) => callback(data));
+    },
+    removeConnectionClosedListener: () => {
+      ipcRenderer.removeAllListeners('ssh:connection-closed');
+    },
+    removeConnectionErrorListener: () => {
+      ipcRenderer.removeAllListeners('ssh:connection-error');
+    },
+    // SFTP operations
+    sftpListDir: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpListDir', connectionId, remotePath),
+    sftpStat: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpStat', connectionId, remotePath),
+    sftpDownload: (connectionId, remotePath, localPath, transferId) => ipcRenderer.invoke('ssh:sftpDownload', connectionId, remotePath, localPath, transferId),
+    sftpUpload: (connectionId, localPath, remotePath, transferId) => ipcRenderer.invoke('ssh:sftpUpload', connectionId, localPath, remotePath, transferId),
+    sftpMkdir: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpMkdir', connectionId, remotePath),
+    sftpDelete: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpDelete', connectionId, remotePath),
+    sftpRmdir: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpRmdir', connectionId, remotePath),
+    sftpRename: (connectionId, oldPath, newPath) => ipcRenderer.invoke('ssh:sftpRename', connectionId, oldPath, newPath),
+    sftpHome: (connectionId) => ipcRenderer.invoke('ssh:sftpHome', connectionId),
+    sftpReadFile: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpReadFile', connectionId, remotePath),
+    sftpWriteFile: (connectionId, remotePath, content) => ipcRenderer.invoke('ssh:sftpWriteFile', connectionId, remotePath, content),
+    exec: (connectionId, command) => ipcRenderer.invoke('ssh:exec', connectionId, command),
+    onSftpProgress: (callback) => {
+      ipcRenderer.on('ssh:sftp-progress', (event, data) => callback(data));
+    },
+    removeSftpProgressListener: () => {
+      ipcRenderer.removeAllListeners('ssh:sftp-progress');
+    },
+  },
+
+  // ─── Local Filesystem ─────────────────────────────────────────────
+  fs: {
+    listDir: (dirPath) => ipcRenderer.invoke('fs:listDir', dirPath),
+    userDirs: () => ipcRenderer.invoke('fs:userDirs'),
+    deleteFile: (filePath) => ipcRenderer.invoke('fs:deleteFile', filePath),
+    deletePath: (targetPath) => ipcRenderer.invoke('fs:deletePath', targetPath),
+    mkdir: (dirPath) => ipcRenderer.invoke('fs:mkdir', dirPath),
+    createFile: (filePath) => ipcRenderer.invoke('fs:createFile', filePath),
+    readFile: (filePath, encoding) => ipcRenderer.invoke('fs:readFile', filePath, encoding),
+    writeFile: (filePath, content, encoding) => ipcRenderer.invoke('fs:writeFile', filePath, content, encoding),
   },
 
   // ─── Plugins ────────────────────────────────────────────────────────
@@ -61,6 +105,11 @@ contextBridge.exposeInMainWorld('termulAPI', {
     getJS: () => ipcRenderer.invoke('xterm:getJS'),
     getCSS: () => ipcRenderer.invoke('xterm:getCSS'),
     getFitAddonJS: () => ipcRenderer.invoke('xterm:getFitAddonJS'),
+  },
+
+  // ─── Monaco Editor Library ────────────────────────────────────────────
+  monaco: {
+    getBaseUrl: () => 'monaco://resources/vs/',
   },
 
   // ─── Shared UI Components ───────────────────────────────────────────

@@ -11,10 +11,22 @@
   <div id="app" class="dialog-mode"></div>
 
   <!-- Scripts loaded in order -->
+  <!-- TUI Components - must load in order (base class first) -->
+  <script src="js/tui/TuiComponent.js"></script>
+  <script src="js/tui/TuiModal.js"></script>
+  <script src="js/tui/TuiTabs.js"></script>
+  <script src="js/tui/TuiDataTable.js"></script>
+  <script src="js/tui/TuiDropdown.js"></script>
+  <script src="js/tui/TuiToast.js"></script>
+  <script src="js/tui/TuiAccordion.js"></script>
+  <script src="js/tui/TuiSidebarNav.js"></script>
+  <script src="js/tui/TuiRadioGroup.js"></script>
+  <script src="js/tui/index.js"></script>
   <script src="js/plugin-loader.js"></script>
   <script src="js/connection.js"></script>
   <script src="js/window-manager.js"></script>
   <script src="js/taskbar.js"></script>
+  <script src="js/dashboard-widgets.js"></script>
   <script src="js/menu.js"></script>
   <script src="js/desktop.js"></script>
   <script src="js/app.js"></script>

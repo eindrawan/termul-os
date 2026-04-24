@@ -4,6 +4,7 @@
   "version": "1.0.0",
   "author": "TermulOS",
   "dirName": "system-monitor",
+  "icon": "icon.png",
   "system": true,
   "window": {
     "width": 600,

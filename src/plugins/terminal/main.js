@@ -23,6 +23,10 @@
   var fitAddon = null;     // FitAddon instance
   var resizeObserver = null;
 
+  // Stored callback references for proper cleanup
+  var _shellDataCb = null;
+  var _shellClosedCb = null;
+
   // Elements (resolved after mount)
   var container, termContainer, statusEl;
 
@@ -59,8 +63,13 @@
     // Create xterm.js Terminal instance
     initTerminal();
 
-    // Start SSH shell
-    startShell();
+    // Delay shell start by one frame so the terminal has time to
+    // complete its first render and FitAddon can measure accurate
+    // container dimensions.  Without this delay the initial row count
+    // may be wrong, which causes the bottom rows to be cut off.
+    requestAnimationFrame(function() {
+      setTimeout(startShell, 50);
+    });
   });
 
   PLUGIN_LIFECYCLE.onUnmount(function() {
@@ -115,17 +124,27 @@
     // Open the terminal in our container element within the shadow DOM
     term.open(termContainer);
 
-    // Fit to container
+    // Fit to container after a micro-delay so the layout engine has settled
     if (fitAddon) {
-      fitAddon.fit();
+      setTimeout(function() {
+        try { fitAddon.fit(); } catch (e) { /* ignore */ }
+      }, 0);
     }
 
-    // Auto-fit on resize using ResizeObserver
+    // Auto-fit on resize using ResizeObserver with debounce
     if (typeof ResizeObserver !== 'undefined') {
+      var resizeTimer = null;
       resizeObserver = new ResizeObserver(function() {
-        if (fitAddon && term) {
-          try { fitAddon.fit(); } catch (e) { /* ignore during teardown */ }
-        }
+        if (!fitAddon || !term) return;
+        // Debounce to avoid excessive re-fit calls during active resizing
+        if (resizeTimer) clearTimeout(resizeTimer);
+        resizeTimer = setTimeout(function() {
+          try {
+            fitAddon.fit();
+            resizeShell();
+          } catch (e) { /* ignore during teardown */ }
+          resizeTimer = null;
+        }, 50);
       });
       resizeObserver.observe(termContainer);
     }
@@ -172,18 +191,28 @@
         isConnected = true;
         updateStatus(true);
 
-        // Notify xterm of initial terminal size
+        // Listen for shell data via scoped events (store refs for cleanup)
+        _shellDataCb = handleShellData;
+        _shellClosedCb = handleShellClosed;
+        api.events.on('shell-data', _shellDataCb);
+        api.events.on('shell-closed', _shellClosedCb);
+
+        // Fit the terminal *now* (container should be fully laid out)
+        // and then notify the remote shell of the dimensions.
+        if (fitAddon) {
+          try { fitAddon.fit(); } catch (e) { /* ignore */ }
+        }
         resizeShell();
 
-        // Listen for shell data via scoped events
-        api.events.on('shell-data', handleShellData);
-        api.events.on('shell-closed', handleShellClosed);
-
-        // Fit after shell is ready
+        // Schedule one more re-fit after a short delay to catch late
+        // layout shifts (e.g. window manager animation completing).
         if (fitAddon) {
           setTimeout(function() {
-            try { fitAddon.fit(); resizeShell(); } catch (e) {}
-          }, 100);
+            try {
+              fitAddon.fit();
+              resizeShell();
+            } catch (e) { /* ignore */ }
+          }, 200);
         }
 
         term.focus();
@@ -245,6 +274,15 @@
   }
 
   function closeShell() {
+    // Remove event listeners to prevent duplicates on reconnect
+    if (_shellDataCb) {
+      api.events.off('shell-data', _shellDataCb);
+      _shellDataCb = null;
+    }
+    if (_shellClosedCb) {
+      api.events.off('shell-closed', _shellClosedCb);
+      _shellClosedCb = null;
+    }
     if (shellStreamId) {
       api.ssh.shellClose(shellStreamId);
     }

@@ -1,0 +1,121 @@
+<div class="editor-container">
+  <!-- Toolbar -->
+  <div class="tui-toolbar">
+    <div class="tui-toolbar-left">
+      <span class="tui-toolbar-title" id="fe-title">File Editor</span>
+    </div>
+    <div class="tui-toolbar-right">
+      <button class="tui-btn-icon" id="fe-open-local" title="Open Local File">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      <button class="tui-btn-icon" id="fe-open-remote" title="Open Remote File">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      </button>
+      <div class="fe-toolbar-separator"></div>
+      <button class="tui-btn-icon" id="fe-save" title="Save (Ctrl+S)">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/>
+          <polyline points="17 21 17 13 7 13 7 21"/>
+          <polyline points="7 3 7 8 15 8"/>
+        </svg>
+      </button>
+      <div class="fe-toolbar-separator"></div>
+      <select class="fe-lang-select tui-select" id="fe-language" title="Language">
+        <option value="plaintext">Plain Text</option>
+        <option value="javascript">JavaScript</option>
+        <option value="typescript">TypeScript</option>
+        <option value="python">Python</option>
+        <option value="css">CSS</option>
+        <option value="html">HTML</option>
+        <option value="json">JSON</option>
+        <option value="markdown">Markdown</option>
+        <option value="xml">XML</option>
+        <option value="yaml">YAML</option>
+        <option value="shell">Shell / Bash</option>
+        <option value="sql">SQL</option>
+        <option value="c">C</option>
+        <option value="cpp">C++</option>
+        <option value="csharp">C#</option>
+        <option value="go">Go</option>
+        <option value="rust">Rust</option>
+        <option value="java">Java</option>
+        <option value="php">PHP</option>
+        <option value="ruby">Ruby</option>
+        <option value="lua">Lua</option>
+        <option value="dockerfile">Dockerfile</option>
+        <option value="ini">INI</option>
+      </select>
+    </div>
+  </div>
+
+  <!-- Tab bar for open files -->
+  <div class="fe-tabs" id="fe-tabs">
+    <div class="fe-tabs-scroll" id="fe-tabs-scroll">
+      <!-- Tab items rendered dynamically -->
+    </div>
+  </div>
+
+  <!-- Monaco editor area -->
+  <div class="fe-editor-wrapper" id="fe-editor-wrapper">
+    <!-- Welcome / empty state -->
+    <div class="fe-empty" id="fe-empty">
+      <div class="fe-empty-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/>
+          <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>
+        </svg>
+      </div>
+      <p class="fe-empty-text">Open a file to start editing</p>
+      <div class="fe-empty-shortcuts">
+        <button class="tui-btn tui-btn-default" id="fe-empty-open-local">Open Local File</button>
+        <button class="tui-btn tui-btn-default" id="fe-empty-open-remote">Open Remote File</button>
+      </div>
+    </div>
+    <!-- Monaco editor container (hidden until a file is opened) -->
+    <div class="fe-editor-area" id="fe-editor-area" style="display:none;"></div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="fe-statusbar" id="fe-statusbar">
+    <div class="fe-statusbar-left">
+      <span class="fe-status-item" id="fe-status-file">No file open</span>
+      <span class="fe-status-item" id="fe-status-modified"></span>
+    </div>
+    <div class="fe-statusbar-right">
+      <span class="fe-status-item" id="fe-status-source">—</span>
+      <span class="fe-status-sep">|</span>
+      <span class="fe-status-item" id="fe-status-lang">Plain Text</span>
+      <span class="fe-status-sep">|</span>
+      <span class="fe-status-item" id="fe-status-encoding">UTF-8</span>
+      <span class="fe-status-sep">|</span>
+      <span class="fe-status-item" id="fe-status-position">Ln 1, Col 1</span>
+    </div>
+  </div>
+
+  <!-- Remote file open dialog (modal) -->
+  <div class="fe-modal-backdrop" id="fe-remote-modal">
+    <div class="fe-modal">
+      <div class="fe-modal-header">
+        <span class="fe-modal-title">Open Remote File</span>
+        <button class="tui-btn-icon" id="fe-remote-modal-close">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="fe-modal-body">
+        <label class="fe-modal-label">File path on remote server:</label>
+        <input type="text" class="tui-input fe-modal-input" id="fe-remote-path" placeholder="/etc/config.yml" />
+      </div>
+      <div class="fe-modal-footer">
+        <button class="tui-btn tui-btn-default" id="fe-remote-cancel">Cancel</button>
+        <button class="tui-btn tui-btn-accent" id="fe-remote-ok">Open</button>
+      </div>
+    </div>
+  </div>
+</div>

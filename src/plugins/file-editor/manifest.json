@@ -1,0 +1,13 @@
+{
+  "name": "File Editor",
+  "description": "Code editor with syntax highlighting — edit local and remote files using Monaco Editor",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "file-editor",
+  "system": true,
+  "window": {
+    "width": 1000,
+    "height": 700
+  },
+  "permissions": ["ssh"]
+}

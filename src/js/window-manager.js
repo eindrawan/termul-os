@@ -11,6 +11,8 @@ class WindowManager {
     this.onWindowOpen = null;
     this.onWindowClose = null;
     this.onWindowFocus = null;
+    /** @type {string|null} Current active tab ID — windows are tagged with their tab */
+    this.currentTabId = null;
   }
 
   init(containerElement) {
@@ -45,6 +47,7 @@ class WindowManager {
       maximized: false,
       zIndex: ++this.zIndex,
       instance: null, // PluginInstance will be set after mount
+      tabId: this.currentTabId, // Tag with the active tab
     };
 
     this.windows.set(windowId, win);
@@ -142,8 +145,20 @@ class WindowManager {
 
       // Store references
       const win = this.windows.get(windowId);
-      if (win) win.instance = instance;
-      window.PluginLoader.registerInstance(windowId, instance);
+      if (win) {
+        win.instance = instance;
+        window.PluginLoader.registerInstance(windowId, instance);
+
+        // Re-focus now that the instance exists. The initial focus() call in open()
+        // races with this async mount — by the time open() calls focus(), the
+        // instance is still null so the plugin's onFocus lifecycle is skipped.
+        // This ensures plugins receive focus notification after mounting.
+        if (this.activeWindowId === windowId) {
+          instance.focus();
+        }
+      } else {
+        window.PluginLoader.registerInstance(windowId, instance);
+      }
 
     } catch (err) {
       body.innerHTML = `<div class="os-window-error">
@@ -200,8 +215,11 @@ class WindowManager {
     if (el) {
       if (win.minimized) {
         el.classList.add('minimized');
+        // Keep display for tab visibility, but visually hide via CSS transform
       } else {
         el.classList.remove('minimized');
+        // Restore display if window belongs to the active tab
+        el.style.display = '';
         this.focus(windowId);
       }
     }
@@ -402,22 +420,6 @@ class WindowManager {
     });
   }
 
-  /* ─── Taskbar Items ──────────────────────────────────────────────── */
-
-  getTaskbarItems() {
-    const items = [];
-    this.windows.forEach((win, id) => {
-      items.push({
-        id: id,
-        name: win.plugin.name,
-        icon: win.plugin.icon,
-        minimized: win.minimized,
-        active: this.activeWindowId === id
-      });
-    });
-    return items;
-  }
-
   /**
    * Close all windows immediately (used during disconnect).
    * Performs synchronous cleanup — no animation delays.
@@ -440,6 +442,105 @@ class WindowManager {
     }
     this.windows.clear();
     this.activeWindowId = null;
+  }
+
+  /* ─── Tab-aware Window Visibility ──────────────────────────────────── */
+
+  /**
+   * Hide all windows belonging to a specific tab.
+   * @param {string} tabId
+   */
+  hideWindowsForTab(tabId) {
+    this.windows.forEach((win, id) => {
+      if (win.tabId !== tabId) return;
+      const el = document.getElementById(id);
+      if (el) {
+        el.style.display = 'none';
+      }
+    });
+    // Clear active window if it belonged to this tab
+    if (this.activeWindowId) {
+      const activeWin = this.windows.get(this.activeWindowId);
+      if (activeWin && activeWin.tabId === tabId) {
+        this.activeWindowId = null;
+      }
+    }
+  }
+
+  /**
+   * Show all windows belonging to a specific tab and restore their visibility.
+   * @param {string} tabId
+   * @returns {string|null} The last focused windowId for this tab, or null
+   */
+  showWindowsForTab(tabId) {
+    let lastFocusedId = null;
+    let highestZ = 0;
+
+    this.windows.forEach((win, id) => {
+      if (win.tabId !== tabId) return;
+      const el = document.getElementById(id);
+      if (el) {
+        // Always restore display for windows on this tab
+        // Minimized windows are visually hidden via CSS transform, not display
+        el.style.display = '';
+      }
+      // Track highest z-index window as the "last focused"
+      if (win.zIndex > highestZ) {
+        highestZ = win.zIndex;
+        lastFocusedId = id;
+      }
+    });
+
+    return lastFocusedId;
+  }
+
+  /**
+   * Close all windows belonging to a specific tab.
+   * @param {string} tabId
+   */
+  closeWindowsForTab(tabId) {
+    const ids = [];
+    this.windows.forEach((win, id) => {
+      if (win.tabId === tabId) ids.push(id);
+    });
+
+    for (const id of ids) {
+      const win = this.windows.get(id);
+      if (!win) continue;
+
+      if (win.instance) {
+        win.instance.unmount();
+        window.PluginLoader.unregisterInstance(id);
+      }
+
+      const el = document.getElementById(id);
+      if (el) el.remove();
+
+      this.windows.delete(id);
+      if (this.activeWindowId === id) {
+        this.activeWindowId = null;
+      }
+    }
+  }
+
+  /**
+   * Get taskbar items filtered by the current tab.
+   * @returns {Array}
+   */
+  getTaskbarItems() {
+    const items = [];
+    this.windows.forEach((win, id) => {
+      // Only include windows for the current tab
+      if (this.currentTabId && win.tabId !== this.currentTabId) return;
+      items.push({
+        id: id,
+        name: win.plugin.name,
+        icon: win.plugin.icon,
+        minimized: win.minimized,
+        active: this.activeWindowId === id
+      });
+    });
+    return items;
   }
 }
 
