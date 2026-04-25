@@ -46,6 +46,8 @@ class TermulOS {
       await this.loadPlugins();
       if (window.Desktop) window.Desktop.setPlugins(this.plugins);
       if (window.StartMenu) window.StartMenu.setPlugins(this.plugins);
+      // Update tunnel indicator visibility (plugin may have been installed/uninstalled)
+      this.updateTaskbarTunnel();
     });
 
     // Setup IPC listeners for SSH
@@ -65,6 +67,12 @@ class TermulOS {
       document.dispatchEvent(event);
     });
 
+    // FTP progress events — bridge IPC to DOM for plugins
+    window.termulAPI.ftp.onFtpProgress((data) => {
+      const event = new CustomEvent('termul:ftp-progress', { detail: data });
+      document.dispatchEvent(event);
+    });
+
     // SSH connection lifecycle — detect drops and errors
     window.termulAPI.ssh.onConnectionClosed((data) => {
       this.handleConnectionLost(data.connectionId, 'Connection closed by server');
@@ -73,6 +81,22 @@ class TermulOS {
     window.termulAPI.ssh.onConnectionError((data) => {
       this.handleConnectionLost(data.connectionId, data.error || 'Connection error');
     });
+
+    // Tunnel: open port forwarder plugin from system tray
+    window.termulAPI.tunnel.onOpenPlugin(() => {
+      const plugin = window.PluginLoader.plugins.get('port-forwarder');
+      if (plugin) {
+        this.launchApp(plugin);
+      }
+    });
+
+    // Tunnel: status changed → refresh taskbar indicator
+    window.termulAPI.tunnel.onStatusChanged(() => {
+      this.updateTaskbarTunnel();
+    });
+
+    // Store reference for tunnel toggle from taskbar
+    this._tunnelRules = [];
 
     // Listen for "open in editor" events from plugins (e.g. file-transfer)
     document.addEventListener('termul:open-in-editor', (e) => {
@@ -104,7 +128,7 @@ class TermulOS {
               </svg>
             </div>
             <h1>TermulOS</h1>
-            <p>SSH Client</p>
+            <p>SSH &amp; FTP Client</p>
           </div>
           <div class="dialog-sidebar-profiles" id="dialog-profiles-list">
             <!-- Saved profiles injected here -->
@@ -162,8 +186,8 @@ class TermulOS {
       <div class="dialog-profile-item" data-profile-id="${profile.id}">
         <div class="profile-color-dot" style="background: ${profile.color || '#0078D4'}"></div>
         <div class="profile-info">
-          <span class="profile-name">${profile.name || profile.host}</span>
-          <span class="profile-host">${profile.username}@${profile.host}</span>
+          <span class="profile-name">${profile.name || profile.host}${profile.protocol === 'ftp' ? ' <small style="opacity:0.6">(FTP)</small>' : ''}</span>
+          <span class="profile-host">${profile.username}@${profile.host}${profile.port && profile.port !== (profile.protocol === 'ftp' ? 21 : 22) ? ':' + profile.port : ''}</span>
         </div>
         <div class="profile-actions">
           <button class="profile-action-btn profile-connect-btn" data-action="connect" title="Connect">
@@ -232,6 +256,7 @@ class TermulOS {
     if (!main) return;
 
     const isNew = !profile.name;
+    const protocol = profile.protocol || 'ssh';
     main.innerHTML = `
       <div class="dialog-form">
         <div class="dialog-form-header">
@@ -247,6 +272,19 @@ class TermulOS {
             <label>Profile Name</label>
             <input type="text" id="form-name" placeholder="My Server" value="${profile.name || ''}" />
           </div>
+          <div class="form-group">
+            <label>Protocol</label>
+            <div class="form-radio-group">
+              <label class="form-radio">
+                <input type="radio" name="protocol" value="ssh" ${protocol !== 'ftp' ? 'checked' : ''} />
+                <span>SSH</span>
+              </label>
+              <label class="form-radio">
+                <input type="radio" name="protocol" value="ftp" ${protocol === 'ftp' ? 'checked' : ''} />
+                <span>FTP</span>
+              </label>
+            </div>
+          </div>
           <div class="form-row">
             <div class="form-group flex-1">
               <label>Host</label>
@@ -254,14 +292,14 @@ class TermulOS {
             </div>
             <div class="form-group" style="width:100px">
               <label>Port</label>
-              <input type="number" id="form-port" value="${profile.port || 22}" min="1" max="65535" />
+              <input type="number" id="form-port" value="${profile.port || (protocol === 'ftp' ? 21 : 22)}" min="1" max="65535" />
             </div>
           </div>
           <div class="form-group">
             <label>Username</label>
-            <input type="text" id="form-username" placeholder="root" value="${profile.username || ''}" />
+            <input type="text" id="form-username" placeholder="${protocol === 'ftp' ? 'anonymous' : 'root'}" value="${profile.username || (protocol === 'ftp' ? 'anonymous' : '')}" />
           </div>
-          <div class="form-group">
+          <div class="form-group ssh-only" style="display:${protocol !== 'ftp' ? 'block' : 'none'}">
             <label>Authentication</label>
             <div class="form-radio-group">
               <label class="form-radio">
@@ -274,18 +312,22 @@ class TermulOS {
               </label>
             </div>
           </div>
-          <div class="form-group auth-password" style="display:${profile.authType !== 'key' ? 'block' : 'none'}">
+          <div class="form-group auth-password ssh-only" style="display:${protocol !== 'ftp' && profile.authType !== 'key' ? 'block' : 'none'}">
             <label>Password</label>
             <input type="password" id="form-password" placeholder="Enter password" value="${profile.password || ''}" />
           </div>
-          <div class="form-group auth-key" style="display:${profile.authType === 'key' ? 'block' : 'none'}">
+          <div class="form-group ftp-only" style="display:${protocol === 'ftp' ? 'block' : 'none'}">
+            <label>Password</label>
+            <input type="password" id="form-password-ftp" placeholder="Password (leave empty for anonymous)" value="${profile.password || ''}" />
+          </div>
+          <div class="form-group auth-key ssh-only" style="display:${protocol !== 'ftp' && profile.authType === 'key' ? 'block' : 'none'}">
             <label>Private Key Path</label>
             <div class="form-file-input">
               <input type="text" id="form-keypath" placeholder="~/.ssh/id_rsa" value="${profile.privateKey || ''}" />
               <button class="form-file-btn" id="form-browse-key">Browse</button>
             </div>
           </div>
-          <div class="form-group auth-key" style="display:${profile.authType === 'key' ? 'block' : 'none'}">
+          <div class="form-group auth-key ssh-only" style="display:${protocol !== 'ftp' && profile.authType === 'key' ? 'block' : 'none'}">
             <label>Passphrase (optional)</label>
             <input type="password" id="form-passphrase" placeholder="Key passphrase" value="${profile.passphrase || ''}" />
           </div>
@@ -320,8 +362,35 @@ class TermulOS {
 
     // State for color
     let selectedColor = profile.color || '#0078D4';
+    let selectedProtocol = profile.protocol || 'ssh';
 
-    // Auth type toggle
+    // Protocol toggle
+    main.querySelectorAll('input[name="protocol"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        selectedProtocol = e.target.value;
+        // Toggle visibility of SSH-only and FTP-only fields
+        const sshOnly = main.querySelectorAll('.ssh-only');
+        const ftpOnly = main.querySelectorAll('.ftp-only');
+        for (const el of sshOnly) {
+          el.style.display = selectedProtocol === 'ftp' ? 'none' : '';
+        }
+        for (const el of ftpOnly) {
+          el.style.display = selectedProtocol === 'ftp' ? '' : 'none';
+        }
+        // Update port default
+        const portInput = document.getElementById('form-port');
+        if (portInput && (portInput.value === '22' || portInput.value === '21')) {
+          portInput.value = selectedProtocol === 'ftp' ? '21' : '22';
+        }
+        // Update username placeholder
+        const usernameInput = document.getElementById('form-username');
+        if (usernameInput && !usernameInput.value) {
+          usernameInput.placeholder = selectedProtocol === 'ftp' ? 'anonymous' : 'root';
+        }
+      });
+    });
+
+    // Auth type toggle (SSH only)
     main.querySelectorAll('input[name="authType"]').forEach(radio => {
       radio.addEventListener('change', (e) => {
         main.querySelector('.auth-password').style.display = e.target.value === 'password' ? 'block' : 'none';
@@ -364,10 +433,14 @@ class TermulOS {
   async handleFormSave(originalProfile, connectAfter, selectedColor) {
     const name = document.getElementById('form-name').value.trim();
     const host = document.getElementById('form-host').value.trim();
-    const port = parseInt(document.getElementById('form-port').value) || 22;
+    const protocol = document.querySelector('input[name="protocol"]:checked')?.value || 'ssh';
+    const port = parseInt(document.getElementById('form-port').value) || (protocol === 'ftp' ? 21 : 22);
     const username = document.getElementById('form-username').value.trim();
-    const authType = document.querySelector('input[name="authType"]:checked').value;
-    const password = document.getElementById('form-password')?.value || '';
+    const authType = document.querySelector('input[name="authType"]:checked')?.value || 'password';
+    // For SSH password, use form-password; for FTP password, use form-password-ftp
+    const password = protocol === 'ftp'
+      ? (document.getElementById('form-password-ftp')?.value || '')
+      : (document.getElementById('form-password')?.value || '');
     const privateKey = document.getElementById('form-keypath')?.value || '';
     const passphrase = document.getElementById('form-passphrase')?.value || '';
 
@@ -376,7 +449,7 @@ class TermulOS {
       this.showFormError('Host is required');
       return;
     }
-    if (!username) {
+    if (!username && protocol !== 'ftp') {
       this.showFormError('Username is required');
       return;
     }
@@ -386,11 +459,12 @@ class TermulOS {
       name: name || host,
       host,
       port,
-      username,
-      authType,
-      password: authType === 'password' ? password : '',
-      privateKey: authType === 'key' ? privateKey : '',
-      passphrase: authType === 'key' ? passphrase : '',
+      username: username || (protocol === 'ftp' ? 'anonymous' : ''),
+      authType: protocol === 'ftp' ? 'password' : authType,
+      password: password,
+      privateKey: protocol === 'ftp' ? '' : (authType === 'key' ? privateKey : ''),
+      passphrase: protocol === 'ftp' ? '' : (authType === 'key' ? passphrase : ''),
+      protocol: protocol,
       color: selectedColor
     };
 
@@ -583,6 +657,15 @@ class TermulOS {
     window.Taskbar.onReconnectClick = () => {
       if (this.activeTabId) {
         this.reconnectTab(this.activeTabId);
+      }
+    };
+    window.Taskbar.onTunnelToggle = (ruleId, enable) => {
+      this.toggleTunnelFromTaskbar(ruleId, enable);
+    };
+    window.Taskbar.onTunnelOpenPlugin = () => {
+      const plugin = window.PluginLoader.plugins.get('port-forwarder');
+      if (plugin) {
+        this.launchApp(plugin);
       }
     };
 
@@ -831,9 +914,10 @@ class TermulOS {
     // Close all windows for this tab
     window.WindowManager.closeWindowsForTab(tabId);
 
-    // Disconnect SSH
+    // Disconnect (SSH or FTP)
     try {
-      await window.termulAPI.ssh.disconnect(tab.connectionId);
+      const protocol = (tab.profile && tab.profile.protocol) || 'ssh';
+      await window.ConnectionManager.disconnectById(tab.connectionId, protocol);
     } catch (e) {
       console.warn('[TermulOS] Error disconnecting tab:', e);
     }
@@ -946,7 +1030,7 @@ class TermulOS {
             <div class="tab-picker-profile" data-profile-id="${p.id}">
               <span class="tab-picker-dot" style="background:${p.color || '#0078D4'}"></span>
               <div class="tab-picker-info">
-                <span class="tab-picker-name">${p.name || p.host}</span>
+                <span class="tab-picker-name">${p.name || p.host}${p.protocol === 'ftp' ? ' <small style="opacity:0.6">(FTP)</small>' : ''}</span>
                 <span class="tab-picker-host">${p.username}@${p.host}</span>
               </div>
               <button class="tab-picker-connect" data-action="connect" title="Connect">
@@ -961,6 +1045,16 @@ class TermulOS {
         <div class="tab-picker-quick">
           <div class="tab-picker-quick-title">Quick Connect</div>
           <div class="tab-picker-form">
+            <div class="form-radio-group" style="margin-bottom:8px">
+              <label class="form-radio">
+                <input type="radio" name="quick-protocol" value="ssh" checked />
+                <span>SSH</span>
+              </label>
+              <label class="form-radio">
+                <input type="radio" name="quick-protocol" value="ftp" />
+                <span>FTP</span>
+              </label>
+            </div>
             <div class="tab-picker-form-row">
               <input type="text" id="tab-quick-host" placeholder="Host (e.g. 192.168.1.100)" />
               <input type="number" id="tab-quick-port" placeholder="22" value="22" style="width:70px" />
@@ -994,6 +1088,21 @@ class TermulOS {
     };
     setTimeout(() => document.addEventListener('click', clickOutsideHandler), 10);
 
+    // Quick connect protocol toggle
+    picker.querySelectorAll('input[name="quick-protocol"]').forEach(radio => {
+      radio.addEventListener('change', (e) => {
+        const portInput = document.getElementById('tab-quick-port');
+        if (portInput && (portInput.value === '22' || portInput.value === '21')) {
+          portInput.value = e.target.value === 'ftp' ? '21' : '22';
+          portInput.placeholder = e.target.value === 'ftp' ? '21' : '22';
+        }
+        const usernameInput = document.getElementById('tab-quick-username');
+        if (usernameInput && !usernameInput.value) {
+          usernameInput.placeholder = e.target.value === 'ftp' ? 'anonymous' : 'Username';
+        }
+      });
+    });
+
     // Saved profile connect buttons
     picker.querySelectorAll('.tab-picker-profile').forEach(item => {
       item.addEventListener('click', async (e) => {
@@ -1017,17 +1126,18 @@ class TermulOS {
 
     // Quick connect form
     document.getElementById('tab-quick-connect')?.addEventListener('click', async () => {
+      const quickProtocol = document.querySelector('input[name="quick-protocol"]:checked')?.value || 'ssh';
       const host = document.getElementById('tab-quick-host')?.value.trim();
-      const port = parseInt(document.getElementById('tab-quick-port')?.value) || 22;
-      const username = document.getElementById('tab-quick-username')?.value.trim();
+      const port = parseInt(document.getElementById('tab-quick-port')?.value) || (quickProtocol === 'ftp' ? 21 : 22);
+      const username = document.getElementById('tab-quick-username')?.value.trim() || (quickProtocol === 'ftp' ? 'anonymous' : '');
       const password = document.getElementById('tab-quick-password')?.value || '';
 
-      if (!host || !username) {
+      if (!host) {
         const errEl = picker.querySelector('.tab-picker-form-error');
         if (errEl) errEl.remove();
         const err = document.createElement('div');
         err.className = 'tab-picker-form-error';
-        err.textContent = 'Host and username are required';
+        err.textContent = 'Host is required';
         picker.querySelector('.tab-picker-form').prepend(err);
         setTimeout(() => err.remove(), 3000);
         return;
@@ -1041,6 +1151,7 @@ class TermulOS {
         username,
         authType: 'password',
         password,
+        protocol: quickProtocol,
         color: window.ConnectionManager.getRandomColor(),
         createdAt: new Date().toISOString(),
         updatedAt: new Date().toISOString()
@@ -1108,10 +1219,11 @@ class TermulOS {
     // Close all windows (all tabs)
     window.WindowManager.closeAll();
 
-    // Disconnect all SSH connections
+    // Disconnect all connections (SSH and FTP)
     for (const tab of this.tabs) {
       try {
-        await window.termulAPI.ssh.disconnect(tab.connectionId);
+        const protocol = (tab.profile && tab.profile.protocol) || 'ssh';
+        await window.ConnectionManager.disconnectById(tab.connectionId, protocol);
       } catch (e) {
         console.warn('[TermulOS] Error disconnecting:', e);
       }
@@ -1328,6 +1440,40 @@ class TermulOS {
     window.Taskbar.updateItems(items);
     // Update connection status in tray
     window.Taskbar.updateConnectionStatus(this.getActiveTabConnectionStatus());
+    // Update tunnel indicator in tray
+    this.updateTaskbarTunnel();
+  }
+
+  /**
+   * Refresh the tunnel indicator in the taskbar with current rules.
+   */
+  async updateTaskbarTunnel() {
+    // Only show tunnel indicator if the port-forwarder plugin is installed
+    if (!window.PluginLoader || !window.PluginLoader.plugins.has('port-forwarder')) {
+      window.Taskbar.updateTunnelStatus([]);
+      return;
+    }
+    try {
+      const rules = await window.termulAPI.tunnel.getRules();
+      this._tunnelRules = rules || [];
+      window.Taskbar.updateTunnelStatus(this._tunnelRules);
+    } catch (e) {
+      // Ignore — may not be available yet
+    }
+  }
+
+  /**
+   * Toggle a tunnel rule on/off from the taskbar popup.
+   */
+  async toggleTunnelFromTaskbar(ruleId, enable) {
+    if (enable) {
+      const connectionId = this.connectionId;
+      if (!connectionId) return;
+      await window.termulAPI.tunnel.start(ruleId, connectionId);
+    } else {
+      await window.termulAPI.tunnel.stop(ruleId);
+    }
+    await this.updateTaskbarTunnel();
   }
 
   /**

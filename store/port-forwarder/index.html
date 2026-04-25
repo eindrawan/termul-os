@@ -1,0 +1,88 @@
+<div class="pf-container">
+  <div class="tui-toolbar">
+    <div class="tui-toolbar-left">
+      <span class="tui-toolbar-title" style="font-size:16px;font-weight:600">Port Forwarder</span>
+    </div>
+    <div class="tui-toolbar-right">
+      <div class="tui-status" id="pf-connection-status">
+        <span class="tui-status-dot"></span>
+        <span class="status-text">Checking...</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="pf-content tui-scrollbar">
+    <div class="pf-header">
+      <div class="pf-header-left">
+        <span class="pf-header-label">Forwarding Rules</span>
+        <span class="pf-header-count" id="pf-rule-count">0 rules</span>
+      </div>
+      <button class="tui-btn tui-btn-primary" id="pf-add-btn">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+        </svg>
+        <span>Add Rule</span>
+      </button>
+    </div>
+
+    <!-- Add/Edit Form (hidden by default) -->
+    <div class="pf-add-form" id="pf-add-form" style="display:none">
+      <div class="pf-form-card">
+        <div class="pf-form-title" id="pf-form-title">New Forwarding Rule</div>
+        <div class="pf-form-grid">
+          <div class="pf-form-group pf-form-full">
+            <label class="pf-form-label">Rule Name</label>
+            <input class="tui-input" type="text" id="pf-name" placeholder="e.g. MySQL Forward">
+          </div>
+          <div class="pf-form-group">
+            <label class="pf-form-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px">
+                <rect x="2" y="8" width="6" height="8" rx="1"/>
+              </svg>
+              Local Port (Port In)
+            </label>
+            <input class="tui-input" type="number" id="pf-local-port" placeholder="8080" min="1" max="65535">
+          </div>
+          <div class="pf-form-group">
+            <label class="pf-form-label">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="vertical-align:middle;margin-right:4px">
+                <rect x="16" y="8" width="6" height="8" rx="1"/>
+              </svg>
+              Remote Port (Port Out)
+            </label>
+            <input class="tui-input" type="number" id="pf-remote-port" placeholder="80" min="1" max="65535">
+          </div>
+          <div class="pf-form-group pf-form-full">
+            <label class="pf-form-label">Remote Host</label>
+            <input class="tui-input" type="text" id="pf-remote-host" value="localhost" placeholder="localhost">
+            <span class="pf-form-hint">Target host as seen from the SSH server (usually localhost)</span>
+          </div>
+        </div>
+        <div class="pf-form-actions">
+          <button class="tui-btn tui-btn-default" id="pf-cancel-btn">Cancel</button>
+          <button class="tui-btn tui-btn-primary" id="pf-save-btn">Save Rule</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Empty state -->
+    <div class="pf-empty" id="pf-empty-state">
+      <div class="pf-empty-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+          <rect x="2" y="8" width="6" height="8" rx="1"/>
+          <rect x="16" y="8" width="6" height="8" rx="1"/>
+          <path d="M8 12h8"/>
+          <path d="M13 9l3 3-3 3"/>
+        </svg>
+      </div>
+      <p class="pf-empty-text">No forwarding rules yet</p>
+      <p class="pf-empty-subtext">Click "Add Rule" to create a port forwarding rule.</p>
+    </div>
+
+    <!-- Rules list -->
+    <div class="pf-rules-list" id="pf-rules-list"></div>
+
+    <!-- Error toast -->
+    <div class="pf-error" id="pf-error" style="display:none"></div>
+  </div>
+</div>

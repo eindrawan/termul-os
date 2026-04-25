@@ -1,0 +1,13 @@
+{
+  "name": "Port Forwarder",
+  "description": "Forward local ports to remote SSH server via tunneling",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "port-forwarder",
+  "system": false,
+  "window": {
+    "width": 700,
+    "height": 520
+  },
+  "permissions": ["ssh"]
+}

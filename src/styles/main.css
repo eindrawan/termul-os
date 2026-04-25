@@ -438,8 +438,10 @@ input {
 .dialog-form {
   width: 100%;
   max-width: 480px;
+  max-height: 100%;
   display: flex;
   flex-direction: column;
+  overflow: hidden;
 }
 
 .dialog-form-header {
@@ -472,12 +474,15 @@ input {
 
 .dialog-form-body {
   flex: 1;
-  overflow-y: auto;
+  min-height: 0;
+  overflow-y: overlay;
   margin-bottom: var(--space-xl);
+  padding-right: 4px;
+  scrollbar-gutter: stable;
 }
 
 .dialog-form-body::-webkit-scrollbar {
-  width: 4px;
+  width: 6px;
 }
 
 .dialog-form-body::-webkit-scrollbar-track {
@@ -485,8 +490,17 @@ input {
 }
 
 .dialog-form-body::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.1);
-  border-radius: 2px;
+  background: rgba(255, 255, 255, 0.15);
+  border-radius: 3px;
+  transition: opacity 0.3s ease;
+}
+
+.dialog-form-body:not(:hover)::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0);
+}
+
+.dialog-form-body:hover::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.2);
 }
 
 .form-error-toast {
@@ -506,6 +520,7 @@ input {
 .form-row {
   display: flex;
   gap: var(--space-md);
+  margin-bottom: var(--space-lg);
 }
 
 .form-row .form-group {
@@ -650,6 +665,7 @@ input {
   gap: var(--space-md);
   padding-top: var(--space-lg);
   border-top: 1px solid var(--border-subtle);
+  flex-shrink: 0;
 }
 
 /* ─── Buttons ───────────────────────────────────────────────────────── */
@@ -1700,6 +1716,7 @@ input {
   display: flex;
   align-items: center;
   gap: var(--space-md);
+  position: relative;
 }
 
 /* ─── Connection Status (Taskbar Tray) ────────────────────────────── */
@@ -1779,6 +1796,171 @@ input {
 .conn-reconnect-btn:hover {
   background: var(--accent-primary);
   color: white;
+}
+
+/* ─── Tunnel Indicator (Taskbar Tray) ────────────────────────────── */
+.taskbar-tunnel-indicator {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.taskbar-tunnel-indicator:hover {
+  background: var(--bg-hover);
+}
+
+.taskbar-tunnel-indicator.has-active {
+  color: #60CDFF;
+}
+
+.taskbar-tunnel-indicator.has-active svg {
+  filter: drop-shadow(0 0 3px rgba(96, 205, 255, 0.4));
+}
+
+.tunnel-count {
+  font-size: 10px;
+  font-weight: 600;
+  min-width: 10px;
+  text-align: center;
+}
+
+/* ─── Tunnel Popup (above taskbar) ──────────────────────────────── */
+.taskbar-tunnel-popup {
+  position: absolute;
+  bottom: 100%;
+  right: 0;
+  width: 280px;
+  margin-bottom: 8px;
+  background: rgba(28, 28, 28, 0.96);
+  backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+  z-index: 9999;
+  overflow: hidden;
+  animation: tunnel-popup-in 0.15s ease-out;
+}
+
+@keyframes tunnel-popup-in {
+  from { opacity: 0; transform: translateY(6px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.tunnel-popup-header {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-primary);
+  padding: 12px 14px 8px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tunnel-popup-list {
+  max-height: 240px;
+  overflow-y: auto;
+  padding: 6px 0;
+}
+
+.tunnel-popup-empty {
+  padding: 20px 14px;
+  text-align: center;
+  font-size: 12px;
+  color: var(--text-tertiary);
+}
+
+.tunnel-popup-rule {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 8px 14px;
+  transition: background var(--transition-fast);
+}
+
+.tunnel-popup-rule:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.tunnel-popup-rule-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.tunnel-popup-rule-name {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.tunnel-popup-rule-ports {
+  font-size: 10px;
+  color: var(--text-tertiary);
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+  margin-top: 2px;
+}
+
+/* Toggle in popup */
+.tunnel-popup-rule .tui-toggle {
+  flex-shrink: 0;
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: rgba(255, 255, 255, 0.1);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.2s;
+  border: none;
+  padding: 0;
+}
+
+.tunnel-popup-rule .tui-toggle.active {
+  background: var(--accent-primary, #0067C0);
+}
+
+.tunnel-popup-rule .tui-toggle::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: #ffffff;
+  border-radius: 50%;
+  transition: transform 0.2s;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+
+.tunnel-popup-rule .tui-toggle.active::after {
+  transform: translateX(16px);
+}
+
+.tunnel-popup-footer {
+  padding: 8px 14px 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.tunnel-popup-open-btn {
+  width: 100%;
+  padding: 6px 0;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 6px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.tunnel-popup-open-btn:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-primary);
 }
 
 .taskbar-clock {

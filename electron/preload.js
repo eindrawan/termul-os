@@ -122,4 +122,47 @@ contextBridge.exposeInMainWorld('termulAPI', {
   ui: {
     getSharedCSS: () => ipcRenderer.invoke('ui:getSharedCSS'),
   },
+
+  // ─── Port Forwarding Tunnels ──────────────────────────────────────────
+  tunnel: {
+    getRules: () => ipcRenderer.invoke('tunnel:getRules'),
+    saveRules: (rules) => ipcRenderer.invoke('tunnel:saveRules', rules),
+    start: (ruleId, connectionId) => ipcRenderer.invoke('tunnel:start', ruleId, connectionId),
+    stop: (ruleId) => ipcRenderer.invoke('tunnel:stop', ruleId),
+    listActive: () => ipcRenderer.invoke('tunnel:listActive'),
+    onStatusChanged: (callback) => {
+      ipcRenderer.on('tunnel:status-changed', (event, data) => callback(data));
+    },
+    removeStatusChangedListener: () => {
+      ipcRenderer.removeAllListeners('tunnel:status-changed');
+    },
+    onOpenPlugin: (callback) => {
+      ipcRenderer.on('tunnel:open-plugin', () => callback());
+    },
+    removeOpenPluginListener: () => {
+      ipcRenderer.removeAllListeners('tunnel:open-plugin');
+    },
+  },
+
+  // ─── FTP Connections ────────────────────────────────────────────────
+  ftp: {
+    connect: (profile) => ipcRenderer.invoke('ftp:connect', profile),
+    disconnect: (connectionId) => ipcRenderer.invoke('ftp:disconnect', connectionId),
+    listDir: (connectionId, remotePath) => ipcRenderer.invoke('ftp:listDir', connectionId, remotePath),
+    download: (connectionId, remotePath, localPath, transferId) => ipcRenderer.invoke('ftp:download', connectionId, remotePath, localPath, transferId),
+    upload: (connectionId, localPath, remotePath, transferId) => ipcRenderer.invoke('ftp:upload', connectionId, localPath, remotePath, transferId),
+    mkdir: (connectionId, remotePath) => ipcRenderer.invoke('ftp:mkdir', connectionId, remotePath),
+    delete: (connectionId, remotePath) => ipcRenderer.invoke('ftp:delete', connectionId, remotePath),
+    rmdir: (connectionId, remotePath) => ipcRenderer.invoke('ftp:rmdir', connectionId, remotePath),
+    rename: (connectionId, oldPath, newPath) => ipcRenderer.invoke('ftp:rename', connectionId, oldPath, newPath),
+    home: (connectionId) => ipcRenderer.invoke('ftp:home', connectionId),
+    readFile: (connectionId, remotePath) => ipcRenderer.invoke('ftp:readFile', connectionId, remotePath),
+    writeFile: (connectionId, remotePath, content) => ipcRenderer.invoke('ftp:writeFile', connectionId, remotePath, content),
+    onFtpProgress: (callback) => {
+      ipcRenderer.on('ftp:progress', (event, data) => callback(data));
+    },
+    removeFtpProgressListener: () => {
+      ipcRenderer.removeAllListeners('ftp:progress');
+    },
+  },
 });

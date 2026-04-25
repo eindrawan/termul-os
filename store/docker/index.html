@@ -1,0 +1,248 @@
+<div class="docker-container">
+  <!-- Toolbar -->
+  <div class="tui-toolbar">
+    <div class="tui-toolbar-left">
+      <svg class="docker-logo" width="20" height="20" viewBox="0 0 256 256" fill="none">
+        <path d="M60 140 C60 140 65 105 105 100 C105 100 100 75 130 65 C130 65 125 55 140 50 C155 45 165 55 165 55 C165 55 175 45 185 50 C195 55 190 70 190 70 C190 70 205 75 205 90 C205 105 190 115 190 115 L60 140Z" fill="#60CDFF"/>
+        <rect x="65" y="110" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="82" y="110" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="99" y="110" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="116" y="110" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="133" y="110" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="150" y="110" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="82" y="97" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="99" y="97" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="116" y="97" width="14" height="10" rx="2" fill="#2396ED"/>
+        <rect x="133" y="97" width="14" height="10" rx="2" fill="#2396ED"/>
+      </svg>
+      <span class="tui-toolbar-title">Docker</span>
+      <div class="tui-status" id="docker-status">
+        <span class="tui-status-dot pulse"></span>
+        <span class="status-text">Loading...</span>
+      </div>
+    </div>
+    <div class="tui-toolbar-right">
+      <button class="tui-btn-icon" id="docker-refresh" title="Refresh">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+      </button>
+      <button class="tui-btn-icon" id="docker-settings" title="Docker Info">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab Bar -->
+  <div class="docker-tabs" id="docker-tabs">
+    <button class="docker-tab active" data-tab="containers">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/>
+      </svg>
+      Containers
+    </button>
+    <button class="docker-tab" data-tab="images">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+      </svg>
+      Images
+    </button>
+    <button class="docker-tab" data-tab="networks">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/>
+        <line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/>
+      </svg>
+      Networks
+    </button>
+    <button class="docker-tab" data-tab="volumes">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+      </svg>
+      Volumes
+    </button>
+  </div>
+
+  <!-- Content Panels -->
+  <div class="docker-content tui-scrollbar">
+
+    <!-- Containers Tab -->
+    <div class="docker-panel active" id="panel-containers">
+      <div class="docker-panel-toolbar">
+        <div class="docker-panel-toolbar-left">
+          <select class="tui-select docker-filter-select" id="container-filter">
+            <option value="all">All</option>
+            <option value="running" selected>Running</option>
+            <option value="stopped">Stopped</option>
+          </select>
+          <span class="docker-count" id="container-count">0 containers</span>
+        </div>
+        <div class="docker-panel-toolbar-right">
+          <button class="tui-btn tui-btn-primary" id="btn-run-container">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Run
+          </button>
+        </div>
+      </div>
+      <div class="docker-list" id="container-list">
+        <div class="docker-empty">
+          <div class="docker-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+              <rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 7V4a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v3"/>
+            </svg>
+          </div>
+          <p class="docker-empty-text">No containers found</p>
+          <p class="docker-empty-subtext">Click "Run" to create a new container</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Images Tab -->
+    <div class="docker-panel" id="panel-images">
+      <div class="docker-panel-toolbar">
+        <div class="docker-panel-toolbar-left">
+          <span class="docker-count" id="image-count">0 images</span>
+        </div>
+        <div class="docker-panel-toolbar-right">
+          <button class="tui-btn tui-btn-primary" id="btn-pull-image">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>
+            </svg>
+            Pull
+          </button>
+          <button class="tui-btn tui-btn-default" id="btn-prune-images">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Prune
+          </button>
+        </div>
+      </div>
+      <div class="docker-list" id="image-list">
+        <div class="docker-empty">
+          <div class="docker-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+              <rect x="3" y="3" width="18" height="18" rx="2"/><circle cx="8.5" cy="8.5" r="1.5"/><path d="M21 15l-5-5L5 21"/>
+            </svg>
+          </div>
+          <p class="docker-empty-text">No images found</p>
+          <p class="docker-empty-subtext">Pull an image to get started</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Networks Tab -->
+    <div class="docker-panel" id="panel-networks">
+      <div class="docker-panel-toolbar">
+        <div class="docker-panel-toolbar-left">
+          <span class="docker-count" id="network-count">0 networks</span>
+        </div>
+        <div class="docker-panel-toolbar-right">
+          <button class="tui-btn tui-btn-primary" id="btn-create-network">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Create
+          </button>
+          <button class="tui-btn tui-btn-default" id="btn-prune-networks">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Prune
+          </button>
+        </div>
+      </div>
+      <div class="docker-list" id="network-list">
+        <div class="docker-empty">
+          <div class="docker-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+              <circle cx="12" cy="5" r="3"/><circle cx="5" cy="19" r="3"/><circle cx="19" cy="19" r="3"/>
+              <line x1="12" y1="8" x2="5" y2="16"/><line x1="12" y1="8" x2="19" y2="16"/>
+            </svg>
+          </div>
+          <p class="docker-empty-text">No networks found</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Volumes Tab -->
+    <div class="docker-panel" id="panel-volumes">
+      <div class="docker-panel-toolbar">
+        <div class="docker-panel-toolbar-left">
+          <span class="docker-count" id="volume-count">0 volumes</span>
+        </div>
+        <div class="docker-panel-toolbar-right">
+          <button class="tui-btn tui-btn-primary" id="btn-create-volume">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+            </svg>
+            Create
+          </button>
+          <button class="tui-btn tui-btn-default" id="btn-prune-volumes">
+            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            </svg>
+            Prune
+          </button>
+        </div>
+      </div>
+      <div class="docker-list" id="volume-list">
+        <div class="docker-empty">
+          <div class="docker-empty-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" opacity="0.3">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <p class="docker-empty-text">No volumes found</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Detail Panel (slide-in) -->
+  <div class="docker-detail" id="docker-detail">
+    <div class="docker-detail-header">
+      <div class="docker-detail-title">
+        <span id="detail-title">Container Details</span>
+      </div>
+      <button class="tui-btn-icon" id="detail-close" title="Close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="docker-detail-body tui-scrollbar" id="detail-body">
+      <!-- Dynamic content injected here -->
+    </div>
+  </div>
+
+  <!-- Log Panel (slide-in) -->
+  <div class="docker-log-panel" id="docker-log-panel">
+    <div class="docker-log-header">
+      <div class="docker-log-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/>
+        </svg>
+        <span id="log-title">Logs</span>
+      </div>
+      <div class="docker-log-actions">
+        <button class="tui-btn-icon" id="log-refresh" title="Refresh logs">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
+        <button class="tui-btn-icon" id="log-close" title="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="docker-log-body tui-scrollbar" id="log-body">
+      <pre id="log-content">Select a container to view logs</pre>
+    </div>
+  </div>
+</div>

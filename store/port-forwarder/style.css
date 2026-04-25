@@ -1,0 +1,270 @@
+/* Port Forwarder plugin styles */
+.pf-container *,
+.pf-container *::before,
+.pf-container *::after {
+  box-sizing: border-box;
+}
+
+.pf-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--tui-bg-surface, #0f0f0f);
+  color: var(--tui-text-primary, #e0e0e0);
+}
+
+.pf-content {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px;
+}
+
+/* Header */
+.pf-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.pf-header-left {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.pf-header-label {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tui-text-primary, #e0e0e0);
+}
+
+.pf-header-count {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.4));
+}
+
+/* Form */
+.pf-add-form {
+  margin-bottom: 20px;
+  animation: pf-slide-down 0.2s ease-out;
+}
+
+@keyframes pf-slide-down {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.pf-form-card {
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  padding: 20px;
+}
+
+.pf-form-title {
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 16px;
+  color: var(--tui-text-primary, #e0e0e0);
+}
+
+.pf-form-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+  margin-bottom: 20px;
+}
+
+.pf-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.pf-form-full {
+  grid-column: 1 / -1;
+}
+
+.pf-form-label {
+  font-size: 12px;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.6));
+  font-weight: 500;
+}
+
+.pf-form-hint {
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.35));
+}
+
+.pf-form-group .tui-input {
+  width: 100%;
+  min-width: 0;
+}
+
+/* Remove number input spinners for cleaner look */
+.pf-form-group input[type="number"]::-webkit-inner-spin-button,
+.pf-form-group input[type="number"]::-webkit-outer-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.pf-form-group input[type="number"] {
+  -moz-appearance: textfield;
+}
+
+.pf-form-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  padding-top: 16px;
+  margin-top: 4px;
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* Empty state */
+.pf-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 60px 20px;
+}
+
+.pf-empty-icon {
+  margin-bottom: 16px;
+  opacity: 0.25;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.4));
+}
+
+.pf-empty-text {
+  font-size: 15px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  margin: 0 0 4px;
+}
+
+.pf-empty-subtext {
+  font-size: 13px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.3));
+  margin: 0;
+}
+
+/* Rules list */
+.pf-rules-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+/* Rule card */
+.pf-rule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 14px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 8px;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.pf-rule:hover {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.1);
+}
+
+.pf-rule.active {
+  border-color: rgba(76, 175, 80, 0.3);
+  background: rgba(76, 175, 80, 0.04);
+}
+
+.pf-rule-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.4));
+}
+
+.pf-rule.active .pf-rule-icon {
+  background: rgba(76, 175, 80, 0.12);
+  color: #4CAF50;
+}
+
+.pf-rule-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.pf-rule-name {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tui-text-primary, #e0e0e0);
+  margin-bottom: 4px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.pf-rule-ports {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pf-rule-ports .pf-arrow {
+  color: rgba(255, 255, 255, 0.25);
+}
+
+.pf-rule-right {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.pf-rule-delete {
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.pf-rule:hover .pf-rule-delete {
+  opacity: 1;
+}
+
+/* Error toast */
+.pf-error {
+  position: absolute;
+  bottom: 20px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: rgba(244, 67, 54, 0.92);
+  color: white;
+  padding: 10px 20px;
+  border-radius: 8px;
+  font-size: 13px;
+  z-index: 100;
+  animation: pf-fade-in 0.2s ease-out;
+  max-width: 90%;
+  text-align: center;
+}
+
+@keyframes pf-fade-in {
+  from { opacity: 0; transform: translateX(-50%) translateY(8px); }
+  to { opacity: 1; transform: translateX(-50%) translateY(0); }
+}
+
+/* Small button variant */
+.tui-btn-sm {
+  padding: 4px 10px;
+  font-size: 12px;
+}

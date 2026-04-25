@@ -1,0 +1,13 @@
+{
+  "name": "Docker",
+  "description": "Docker container management - manage containers, images, networks and volumes",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "docker",
+  "icon": "icon.svg",
+  "window": {
+    "width": 950,
+    "height": 650
+  },
+  "permissions": ["ssh"]
+}

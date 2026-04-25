@@ -1,5 +1,5 @@
 /**
- * Connection Manager - Handles SSH connection profiles and connections
+ * Connection Manager - Handles SSH and FTP connection profiles and connections
  */
 class ConnectionManager {
   constructor() {
@@ -38,11 +38,18 @@ class ConnectionManager {
   }
 
   /**
-   * Connect to a server using a profile
+   * Connect to a server using a profile.
+   * Routes to SSH or FTP based on profile.protocol.
    */
   async connect(profile) {
+    const protocol = profile.protocol || 'ssh';
     try {
-      const result = await window.termulAPI.ssh.connect(profile);
+      let result;
+      if (protocol === 'ftp') {
+        result = await window.termulAPI.ftp.connect(profile);
+      } else {
+        result = await window.termulAPI.ssh.connect(profile);
+      }
       if (result.success) {
         this.currentConnection = profile;
         this.connectionId = result.connectionId;
@@ -57,16 +64,37 @@ class ConnectionManager {
   }
 
   /**
-   * Disconnect from current server
+   * Disconnect from current server.
+   * Routes to SSH or FTP based on the stored profile's protocol.
    */
   async disconnect() {
     if (this.connectionId) {
-      await window.termulAPI.ssh.disconnect(this.connectionId);
+      const protocol = (this.currentConnection && this.currentConnection.protocol) || 'ssh';
+      if (protocol === 'ftp') {
+        await window.termulAPI.ftp.disconnect(this.connectionId);
+      } else {
+        await window.termulAPI.ssh.disconnect(this.connectionId);
+      }
       this.currentConnection = null;
       this.connectionId = null;
       if (this.onDisconnected) {
         this.onDisconnected();
       }
+    }
+  }
+
+  /**
+   * Disconnect a specific connection by ID and protocol.
+   * @param {string} connectionId
+   * @param {string} protocol - 'ssh' or 'ftp'
+   */
+  async disconnectById(connectionId, protocol) {
+    if (!connectionId) return;
+    protocol = protocol || 'ssh';
+    if (protocol === 'ftp') {
+      await window.termulAPI.ftp.disconnect(connectionId);
+    } else {
+      await window.termulAPI.ssh.disconnect(connectionId);
     }
   }
 
@@ -78,19 +106,22 @@ class ConnectionManager {
   }
 
   /**
-   * Create a new blank profile
+   * Create a new blank profile.
+   * @param {string} [protocol='ssh'] - 'ssh' or 'ftp'
    */
-  createBlankProfile() {
+  createBlankProfile(protocol) {
+    protocol = protocol || 'ssh';
     return {
       id: this.generateId(),
       name: '',
       host: '',
-      port: 22,
-      username: '',
+      port: protocol === 'ftp' ? 21 : 22,
+      username: protocol === 'ftp' ? 'anonymous' : '',
       authType: 'password',
       password: '',
       privateKey: '',
       passphrase: '',
+      protocol: protocol,
       color: this.getRandomColor(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString()

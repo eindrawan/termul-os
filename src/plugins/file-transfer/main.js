@@ -1,4 +1,4 @@
-// File Transfer Plugin — WinSCP-like dual-pane SFTP manager
+// File Transfer Plugin — WinSCP-like dual-pane SFTP/FTP manager
 //
 // Available globals from the sandbox:
 //   PLUGIN_API, PLUGIN_LIFECYCLE, PLUGIN_EXPORTS,
@@ -6,10 +6,12 @@
 //   setTimeout, setInterval, clearTimeout, clearInterval
 //
 // Additional APIs used via PLUGIN_API (termulAPI):
-//   api.ssh.sftpListDir, sftpDownload, sftpUpload, sftpMkdir, sftpDelete,
-//   sftpRmdir, sftpRename, sftpHome, sftpStat
-//   api.events.on('sftp-progress', ...)
-//   (exposed via preload: termulAPI.ssh.sftp*, termulAPI.fs.*)
+//   SSH: api.ssh.sftpListDir, sftpDownload, sftpUpload, sftpMkdir, sftpDelete,
+//        sftpRmdir, sftpRename, sftpHome, sftpStat
+//   FTP: api.ftp.listDir, ftp.download, ftp.upload, ftp.mkdir, ftp.delete,
+//        ftp.rmdir, ftp.rename, ftp.home
+//   api.events.on('sftp-progress', ...) / api.events.on('ftp-progress', ...)
+//   (exposed via preload: termulAPI.ssh.sftp*, termulAPI.ftp.*, termulAPI.fs.*)
 
 (function () {
   var api = PLUGIN_API;
@@ -45,6 +47,23 @@
     upload: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
     download: '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 16 12 21 17 16"/><line x1="12" y1="21" x2="12" y2="9"/></svg>',
   };
+
+  // ─── Protocol Detection ──────────────────────────────────────────────
+
+  /**
+   * Detect the protocol ('ssh' or 'ftp') from the current profile.
+   */
+  function getProtocol() {
+    var profile = api.profile;
+    return (profile && profile.protocol) || 'ssh';
+  }
+
+  /**
+   * Check if current connection is FTP.
+   */
+  function isFtp() {
+    return getProtocol() === 'ftp';
+  }
 
   // ─── DOM References (resolved in onMount) ───────────────────────────
   var els = {};
@@ -215,6 +234,9 @@
 
     // Listen for SFTP progress
     api.events.on('sftp-progress', handleProgress);
+
+    // Listen for FTP progress
+    api.events.on('ftp-progress', handleProgress);
 
     // Set initial active pane
     setActivePane('local');
@@ -661,12 +683,17 @@
 
   async function initRemote() {
     if (!api.connectionId) {
-      showRemoteError('Not connected to SSH server');
+      showRemoteError(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server');
       els.remotePath.value = '';
       return;
     }
     try {
-      var result = await window.termulAPI.ssh.sftpHome(api.connectionId);
+      var result;
+      if (isFtp()) {
+        result = await window.termulAPI.ftp.home(api.connectionId);
+      } else {
+        result = await window.termulAPI.ssh.sftpHome(api.connectionId);
+      }
       if (result.success) {
         remotePath = result.path;
       } else {
@@ -687,7 +714,12 @@
     els.remoteBody.innerHTML = '<div class="ft-loading"><div class="tui-spinner"></div><span>Loading...</span></div>';
 
     try {
-      var result = await window.termulAPI.ssh.sftpListDir(api.connectionId, dirPath);
+      var result;
+      if (isFtp()) {
+        result = await window.termulAPI.ftp.listDir(api.connectionId, dirPath);
+      } else {
+        result = await window.termulAPI.ssh.sftpListDir(api.connectionId, dirPath);
+      }
       if (!result.success) {
         showRemoteError(result.error);
         return;
@@ -847,7 +879,12 @@
   async function goHomeRemote() {
     if (!api.connectionId) return;
     try {
-      var result = await window.termulAPI.ssh.sftpHome(api.connectionId);
+      var result;
+      if (isFtp()) {
+        result = await window.termulAPI.ftp.home(api.connectionId);
+      } else {
+        result = await window.termulAPI.ssh.sftpHome(api.connectionId);
+      }
       if (result.success) loadRemoteDir(result.path);
     } catch (e) {}
   }
@@ -914,7 +951,7 @@
     if (files.length === 0) return;
     if (!api.connectionId) {
       var toast = api.ui.toast();
-      toast.show('Not connected to SSH server', 'error');
+      toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
       return;
     }
 
@@ -933,7 +970,7 @@
     if (files.length === 0) return;
     if (!api.connectionId) {
       var toast = api.ui.toast();
-      toast.show('Not connected to SSH server', 'error');
+      toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
       return;
     }
 
@@ -1001,13 +1038,25 @@
       try {
         var result;
         if (transfer.type === 'upload') {
-          result = await window.termulAPI.ssh.sftpUpload(
-            api.connectionId, transfer.source, transfer.dest, transfer.id
-          );
+          if (isFtp()) {
+            result = await window.termulAPI.ftp.upload(
+              api.connectionId, transfer.source, transfer.dest, transfer.id
+            );
+          } else {
+            result = await window.termulAPI.ssh.sftpUpload(
+              api.connectionId, transfer.source, transfer.dest, transfer.id
+            );
+          }
         } else {
-          result = await window.termulAPI.ssh.sftpDownload(
-            api.connectionId, transfer.source, transfer.dest, transfer.id
-          );
+          if (isFtp()) {
+            result = await window.termulAPI.ftp.download(
+              api.connectionId, transfer.source, transfer.dest, transfer.id
+            );
+          } else {
+            result = await window.termulAPI.ssh.sftpDownload(
+              api.connectionId, transfer.source, transfer.dest, transfer.id
+            );
+          }
         }
 
         if (result.success) {
@@ -1089,7 +1138,7 @@
   async function addNewFile() {
     if (activePane === 'remote' && !api.connectionId) {
       var toast = api.ui.toast();
-      toast.show('Not connected to SSH server', 'error');
+      toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
       return;
     }
 
@@ -1115,19 +1164,37 @@
         toast.show(e.message || 'Failed to create file', 'error');
       }
     } else {
-      // Remote: use touch via ssh:exec — single command, fast
-      var remotePathEsc = shellQuote(joinRemotePath(remotePath, name));
-      try {
-        var result = await window.termulAPI.ssh.exec(api.connectionId, 'touch ' + remotePathEsc);
-        if (!result.success) {
+      // Remote
+      var remoteFilePath = joinRemotePath(remotePath, name);
+      if (isFtp()) {
+        // FTP: write empty content to create file
+        try {
+          var result = await window.termulAPI.ftp.writeFile(api.connectionId, remoteFilePath, '');
+          if (!result.success) {
+            toast = api.ui.toast();
+            toast.show(result.error || 'Failed to create file', 'error');
+          } else {
+            loadRemoteDir(remotePath);
+          }
+        } catch (e) {
           toast = api.ui.toast();
-          toast.show(result.error || 'Failed to create file', 'error');
-        } else {
-          loadRemoteDir(remotePath);
+          toast.show(e.message || 'Failed to create file', 'error');
         }
-      } catch (e) {
-        toast = api.ui.toast();
-        toast.show(e.message || 'Failed to create file', 'error');
+      } else {
+        // SSH: use touch via ssh:exec
+        var remotePathEsc = shellQuote(remoteFilePath);
+        try {
+          var result = await window.termulAPI.ssh.exec(api.connectionId, 'touch ' + remotePathEsc);
+          if (!result.success) {
+            toast = api.ui.toast();
+            toast.show(result.error || 'Failed to create file', 'error');
+          } else {
+            loadRemoteDir(remotePath);
+          }
+        } catch (e) {
+          toast = api.ui.toast();
+          toast.show(e.message || 'Failed to create file', 'error');
+        }
       }
     }
   }
@@ -1135,7 +1202,7 @@
   async function addNewFolder() {
     if (activePane === 'remote' && !api.connectionId) {
       var toast = api.ui.toast();
-      toast.show('Not connected to SSH server', 'error');
+      toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
       return;
     }
 
@@ -1161,19 +1228,37 @@
         toast.show(e.message || 'Failed to create folder', 'error');
       }
     } else {
-      // Remote: use mkdir -p via ssh:exec
-      var remotePathEsc = shellQuote(joinRemotePath(remotePath, name));
-      try {
-        var result = await window.termulAPI.ssh.exec(api.connectionId, 'mkdir -p ' + remotePathEsc);
-        if (!result.success) {
+      // Remote
+      var remoteFolderPath = joinRemotePath(remotePath, name);
+      if (isFtp()) {
+        // FTP: use FTP mkdir
+        try {
+          var result = await window.termulAPI.ftp.mkdir(api.connectionId, remoteFolderPath);
+          if (!result.success) {
+            toast = api.ui.toast();
+            toast.show(result.error || 'Failed to create folder', 'error');
+          } else {
+            loadRemoteDir(remotePath);
+          }
+        } catch (e) {
           toast = api.ui.toast();
-          toast.show(result.error || 'Failed to create folder', 'error');
-        } else {
-          loadRemoteDir(remotePath);
+          toast.show(e.message || 'Failed to create folder', 'error');
         }
-      } catch (e) {
-        toast = api.ui.toast();
-        toast.show(e.message || 'Failed to create folder', 'error');
+      } else {
+        // SSH: use mkdir -p via ssh:exec
+        var remotePathEsc = shellQuote(remoteFolderPath);
+        try {
+          var result = await window.termulAPI.ssh.exec(api.connectionId, 'mkdir -p ' + remotePathEsc);
+          if (!result.success) {
+            toast = api.ui.toast();
+            toast.show(result.error || 'Failed to create folder', 'error');
+          } else {
+            loadRemoteDir(remotePath);
+          }
+        } catch (e) {
+          toast = api.ui.toast();
+          toast.show(e.message || 'Failed to create folder', 'error');
+        }
       }
     }
   }
@@ -1209,27 +1294,46 @@
     } else {
       if (!api.connectionId) {
         var toast = api.ui.toast();
-        toast.show('Not connected to SSH server', 'error');
+        toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
         return;
       }
 
-      // Remote: batch delete using single rm -rf with all paths
-      // This is much faster than individual SFTP calls
-      var paths = [];
-      for (var j = 0; j < items.length; j++) {
-        paths.push(shellQuote(items[j].path));
-      }
-
-      var cmd = 'rm -rf ' + paths.join(' ');
-      try {
-        var result = await window.termulAPI.ssh.exec(api.connectionId, cmd);
-        if (!result.success) {
-          toast = api.ui.toast();
-          toast.show(result.error || 'Failed to delete items', 'error');
+      if (isFtp()) {
+        // FTP: delete items one by one (FTP doesn't support batch commands)
+        for (var j = 0; j < items.length; j++) {
+          try {
+            if (items[j].isDirectory) {
+              var result = await window.termulAPI.ftp.rmdir(api.connectionId, items[j].path);
+            } else {
+              var result = await window.termulAPI.ftp.delete(api.connectionId, items[j].path);
+            }
+            if (!result.success) {
+              toast = api.ui.toast();
+              toast.show('Failed to delete ' + items[j].name + ': ' + (result.error || 'Unknown error'), 'error');
+            }
+          } catch (e) {
+            toast = api.ui.toast();
+            toast.show('Failed to delete ' + items[j].name + ': ' + (e.message || 'Unknown error'), 'error');
+          }
         }
-      } catch (e) {
-        toast = api.ui.toast();
-        toast.show(e.message || 'Failed to delete items', 'error');
+      } else {
+        // SSH: batch delete using single rm -rf with all paths
+        var paths = [];
+        for (var j = 0; j < items.length; j++) {
+          paths.push(shellQuote(items[j].path));
+        }
+
+        var cmd = 'rm -rf ' + paths.join(' ');
+        try {
+          var result = await window.termulAPI.ssh.exec(api.connectionId, cmd);
+          if (!result.success) {
+            toast = api.ui.toast();
+            toast.show(result.error || 'Failed to delete items', 'error');
+          }
+        } catch (e) {
+          toast = api.ui.toast();
+          toast.show(e.message || 'Failed to delete items', 'error');
+        }
       }
       loadRemoteDir(remotePath);
     }

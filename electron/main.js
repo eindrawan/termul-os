@@ -1,7 +1,11 @@
 const { app, BrowserWindow, ipcMain, dialog, protocol, screen } = require('electron');
 const path = require('path');
 const fs = require('fs');
+const net = require('net');
+const os = require('os');
+const { Transform } = require('stream');
 const { Client } = require('ssh2');
+const ftp = require('basic-ftp');
 
 // ─── Paths ───────────────────────────────────────────────────────────
 const SRC_DIR = path.join(__dirname, '..', 'src');
@@ -9,6 +13,7 @@ const PLUGINS_DIR = path.join(SRC_DIR, 'plugins');
 const USER_DATA = app.getPath('userData');
 const PROFILES_FILE = path.join(USER_DATA, 'profiles.json');
 const SETTINGS_FILE = path.join(USER_DATA, 'settings.json');
+const PORT_FORWARD_FILE = path.join(USER_DATA, 'port-forward-rules.json');
 
 // ─── Monaco Editor custom protocol ─────────────────────────────────
 // Must be registered BEFORE app.whenReady()
@@ -35,8 +40,13 @@ protocol.registerSchemesAsPrivileged([{
 // ─── State ───────────────────────────────────────────────────────────
 let mainWindow = null;
 let sshConnections = new Map();
+let ftpConnections = new Map(); // connId → { client, profile }
 let isManuallyMaximized = false;
 let preMaximizeBounds = null;
+
+// ─── Port Forwarding State ─────────────────────────────────────────────
+let activeTunnels = new Map(); // ruleId → { server, sockets, rule, connectionId }
+let tunnelRules = [];          // Persisted rules array
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -93,6 +103,179 @@ function ensureDataFiles() {
   }
 }
 
+// ─── Port Forwarding Helpers ─────────────────────────────────────────
+
+/**
+ * Load port forwarding rules from disk.
+ */
+function loadPortForwardRules() {
+  try {
+    if (fs.existsSync(PORT_FORWARD_FILE)) {
+      tunnelRules = JSON.parse(fs.readFileSync(PORT_FORWARD_FILE, 'utf-8'));
+    }
+  } catch {
+    tunnelRules = [];
+  }
+  // Tunnels don't persist across restarts (SSH connections are lost),
+  // so reset all enabled flags to false.
+  for (const rule of tunnelRules) {
+    rule.enabled = false;
+  }
+}
+
+/**
+ * Save port forwarding rules to disk.
+ */
+function savePortForwardRules() {
+  try {
+    fs.writeFileSync(PORT_FORWARD_FILE, JSON.stringify(tunnelRules, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('[PortForward] Failed to save rules:', err);
+  }
+}
+
+/**
+ * Start a local port forward tunnel through an SSH connection.
+ * Creates a net.Server on the local port that forwards connections via SSH forwardOut.
+ */
+async function startTunnel(ruleId, connectionId) {
+  const rule = tunnelRules.find(r => r.id === ruleId);
+  if (!rule) return { success: false, error: 'Rule not found' };
+
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active SSH connection' };
+
+  if (activeTunnels.has(ruleId)) {
+    return { success: false, error: 'Tunnel already active' };
+  }
+
+  const remoteHost = rule.remoteHost || 'localhost';
+
+  return new Promise((resolve) => {
+    const sockets = new Set();
+
+    const server = net.createServer((socket) => {
+      conn.forwardOut(
+        socket.remoteAddress || '127.0.0.1',
+        socket.remotePort || 0,
+        remoteHost,
+        rule.remotePort,
+        (err, stream) => {
+          if (err) {
+            socket.destroy();
+            return;
+          }
+
+          const entry = { socket, stream };
+          sockets.add(entry);
+
+          socket.pipe(stream);
+          stream.pipe(socket);
+
+          const cleanup = () => {
+            sockets.delete(entry);
+            try { socket.destroy(); } catch (e) { /* ignore */ }
+            try { stream.close(); } catch (e) { /* ignore */ }
+          };
+
+          socket.on('error', cleanup);
+          stream.on('error', cleanup);
+          socket.on('close', () => sockets.delete(entry));
+          stream.on('close', () => sockets.delete(entry));
+        }
+      );
+    });
+
+    server.on('error', (err) => {
+      if (err.code === 'EADDRINUSE') {
+        resolve({ success: false, error: 'Port ' + rule.localPort + ' is already in use' });
+      } else {
+        resolve({ success: false, error: err.message });
+      }
+    });
+
+    server.listen(rule.localPort, '127.0.0.1', () => {
+      activeTunnels.set(ruleId, { server, sockets, rule, connectionId });
+      rule.enabled = true;
+      savePortForwardRules();
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tunnel:status-changed', { ruleId, active: true });
+      }
+
+      console.log('[PortForward] Started tunnel:', rule.name, 'localhost:' + rule.localPort, '→', remoteHost + ':' + rule.remotePort);
+      resolve({ success: true });
+    });
+  });
+}
+
+/**
+ * Stop an active port forward tunnel.
+ */
+function stopTunnel(ruleId) {
+  const tunnel = activeTunnels.get(ruleId);
+  if (!tunnel) {
+    // Stale state: rule may say enabled but tunnel isn't running.
+    // Just clean up the flag.
+    const rule = tunnelRules.find(r => r.id === ruleId);
+    if (rule && rule.enabled) {
+      rule.enabled = false;
+      savePortForwardRules();
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send('tunnel:status-changed', { ruleId, active: false });
+      }
+    }
+    return { success: true };
+  }
+
+  // Close all active connections
+  for (const entry of tunnel.sockets) {
+    try { entry.socket.destroy(); } catch (e) { /* ignore */ }
+    try { entry.stream.close(); } catch (e) { /* ignore */ }
+  }
+  tunnel.sockets.clear();
+
+  // Close the listening server
+  tunnel.server.close();
+  activeTunnels.delete(ruleId);
+
+  const rule = tunnelRules.find(r => r.id === ruleId);
+  if (rule) rule.enabled = false;
+  savePortForwardRules();
+
+  if (mainWindow && !mainWindow.isDestroyed()) {
+    mainWindow.webContents.send('tunnel:status-changed', { ruleId, active: false });
+  }
+
+  console.log('[PortForward] Stopped tunnel:', ruleId);
+  return { success: true };
+}
+
+/**
+ * Stop all active tunnels associated with a specific SSH connection.
+ */
+function stopAllTunnelsForConnection(connectionId) {
+  const ruleIds = [];
+  for (const [ruleId, tunnel] of activeTunnels) {
+    if (tunnel.connectionId === connectionId) {
+      ruleIds.push(ruleId);
+    }
+  }
+  for (const ruleId of ruleIds) {
+    stopTunnel(ruleId);
+  }
+}
+
+/**
+ * Stop all active tunnels regardless of connection.
+ */
+function stopAllTunnels() {
+  const ruleIds = Array.from(activeTunnels.keys());
+  for (const ruleId of ruleIds) {
+    stopTunnel(ruleId);
+  }
+}
+
 // ─── Window Creation ─────────────────────────────────────────────────
 function createMainWindow() {
   mainWindow = new BrowserWindow({
@@ -132,11 +315,17 @@ function createMainWindow() {
   });
 
   mainWindow.on('closed', () => {
-    // Close all SSH connections
+    // Close all SSH connections and tunnels
+    stopAllTunnels();
     for (const [id, conn] of sshConnections) {
       if (conn && conn.end) conn.end();
     }
     sshConnections.clear();
+    // Close all FTP connections
+    for (const [id, entry] of ftpConnections) {
+      try { entry.client.close(); } catch (e) { /* ignore */ }
+    }
+    ftpConnections.clear();
     mainWindow = null;
   });
 }
@@ -144,6 +333,7 @@ function createMainWindow() {
 // ─── App Lifecycle ───────────────────────────────────────────────────
 app.whenReady().then(() => {
   ensureDataFiles();
+  loadPortForwardRules();
 
   // Register monaco:// protocol to serve Monaco Editor files from node_modules
   // Base URL format: monaco://resources/vs/ — "resources" is a dummy host
@@ -211,10 +401,16 @@ app.whenReady().then(() => {
 });
 
 app.on('window-all-closed', () => {
+  stopAllTunnels();
   for (const [id, conn] of sshConnections) {
     if (conn && conn.end) conn.end();
   }
   sshConnections.clear();
+  // Close all FTP connections
+  for (const [id, entry] of ftpConnections) {
+    try { entry.client.close(); } catch (e) { /* ignore */ }
+  }
+  ftpConnections.clear();
   if (process.platform !== 'darwin') {
     app.quit();
   }
@@ -340,6 +536,9 @@ ipcMain.handle('ssh:connect', (event, profile) => {
     conn.on('close', () => {
       const wasConnected = sshConnections.has(connId);
       sshConnections.delete(connId);
+
+      // Stop any tunnels using this connection
+      stopAllTunnelsForConnection(connId);
 
       // Notify the renderer if this was an established connection that closed
       if (wasConnected && mainWindow && !mainWindow.isDestroyed()) {
@@ -1079,6 +1278,286 @@ ipcMain.handle('ssh:sftpWriteFile', (event, connectionId, remotePath, content) =
 });
 
 // ═══════════════════════════════════════════════════════════════════════
+// IPC: FTP Connection
+// ═══════════════════════════════════════════════════════════════════════
+
+ipcMain.handle('ftp:connect', async (event, profile) => {
+  const client = new ftp.Client();
+  client.ftp.verbose = false;
+  const connId = profile.id || Date.now().toString();
+
+  const ftpConfig = {
+    host: profile.host,
+    port: profile.port || 21,
+    user: profile.username || 'anonymous',
+    password: profile.password || '',
+    secure: false, // Can be extended for FTPS
+  };
+
+  try {
+    await client.access(ftpConfig);
+    ftpConnections.set(connId, { client, profile });
+    return { success: true, connectionId: connId };
+  } catch (err) {
+    return { success: false, error: err.message || 'FTP connection failed' };
+  }
+});
+
+ipcMain.handle('ftp:disconnect', (event, connectionId) => {
+  const entry = ftpConnections.get(connectionId);
+  if (entry) {
+    entry.client.close();
+    ftpConnections.delete(connectionId);
+    return true;
+  }
+  return false;
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// IPC: FTP File Operations
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * List remote directory via FTP.
+ * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
+ */
+ipcMain.handle('ftp:listDir', async (event, connectionId, remotePath) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    const list = await entry.client.list(remotePath);
+    const entries = list.map(item => ({
+      name: item.name,
+      size: item.size || 0,
+      modifyTime: item.modifiedAt ? new Date(item.modifiedAt).getTime() : null,
+      isDirectory: item.isDirectory,
+      isFile: item.isFile,
+      isSymlink: item.isSymbolicLink,
+      path: remotePath === '/' ? '/' + item.name : remotePath + '/' + item.name,
+    }));
+
+    // Sort: directories first, then alphabetical
+    entries.sort((a, b) => {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return a.name.localeCompare(b.name);
+    });
+
+    return { success: true, entries };
+  } catch (err) {
+    return { success: false, error: err.message || 'Failed to list directory' };
+  }
+});
+
+/**
+ * Download a remote file to a local path via FTP.
+ * Reports progress via IPC events using a Transform stream.
+ */
+ipcMain.handle('ftp:download', async (event, connectionId, remotePath, localPath, transferId) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    // Get file size for progress tracking
+    let totalSize = 0;
+    try {
+      const dirPath = remotePath.substring(0, remotePath.lastIndexOf('/')) || '/';
+      const fileName = remotePath.substring(remotePath.lastIndexOf('/') + 1);
+      const list = await entry.client.list(dirPath);
+      const fileInfo = list.find(f => f.name === fileName);
+      if (fileInfo) totalSize = fileInfo.size || 0;
+    } catch (e) {
+      // Size detection is best-effort
+    }
+
+    const writeStream = fs.createWriteStream(localPath);
+    let transferred = 0;
+
+    // Use a Transform stream to intercept data and report progress
+    const progressStream = new Transform({
+      transform(chunk, encoding, callback) {
+        transferred += chunk.length;
+        if (mainWindow && !mainWindow.isDestroyed()) {
+          mainWindow.webContents.send('ftp:progress', {
+            transferId,
+            transferred,
+            total: totalSize,
+            percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
+          });
+        }
+        callback(null, chunk);
+      }
+    });
+
+    progressStream.pipe(writeStream);
+
+    await entry.client.downloadTo(progressStream, remotePath);
+
+    // Ensure final 100% progress is sent
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ftp:progress', {
+        transferId,
+        transferred: totalSize,
+        total: totalSize,
+        percent: 100
+      });
+    }
+
+    return { success: true, transferred: totalSize };
+  } catch (err) {
+    return { success: false, error: err.message || 'Download failed' };
+  }
+});
+
+/**
+ * Upload a local file to a remote path via FTP.
+ * Reports progress via IPC events.
+ */
+ipcMain.handle('ftp:upload', async (event, connectionId, localPath, remotePath, transferId) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  if (!fs.existsSync(localPath)) {
+    return { success: false, error: 'Local file not found' };
+  }
+
+  try {
+    const totalSize = fs.statSync(localPath).size;
+
+    await entry.client.uploadFrom(localPath, remotePath);
+
+    if (mainWindow && !mainWindow.isDestroyed()) {
+      mainWindow.webContents.send('ftp:progress', {
+        transferId,
+        transferred: totalSize,
+        total: totalSize,
+        percent: 100
+      });
+    }
+
+    return { success: true, transferred: totalSize };
+  } catch (err) {
+    return { success: false, error: err.message || 'Upload failed' };
+  }
+});
+
+/**
+ * Create a remote directory via FTP.
+ */
+ipcMain.handle('ftp:mkdir', async (event, connectionId, remotePath) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    await entry.client.ensureDir(remotePath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Delete a remote file via FTP.
+ */
+ipcMain.handle('ftp:delete', async (event, connectionId, remotePath) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    await entry.client.remove(remotePath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Remove a remote directory via FTP.
+ */
+ipcMain.handle('ftp:rmdir', async (event, connectionId, remotePath) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    await entry.client.removeEmptyDir(remotePath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Rename a remote file/directory via FTP.
+ */
+ipcMain.handle('ftp:rename', async (event, connectionId, oldPath, newPath) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    await entry.client.rename(oldPath, newPath);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Get the current working directory via FTP (resolves "home" directory).
+ */
+ipcMain.handle('ftp:home', async (event, connectionId) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  try {
+    const pwd = await entry.client.pwd();
+    return { success: true, path: pwd || '/' };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Read a remote file's text content via FTP.
+ * Downloads to a temp file, reads it, then deletes the temp file.
+ */
+ipcMain.handle('ftp:readFile', async (event, connectionId, remotePath) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  const tmpPath = path.join(os.tmpdir(), 'termulos_ftp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
+  try {
+    await entry.client.downloadTo(tmpPath, remotePath);
+    const content = fs.readFileSync(tmpPath, 'utf-8');
+    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore cleanup error */ }
+    return { success: true, content: content };
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Write text content to a remote file via FTP.
+ * Writes to a temp file, uploads it, then deletes the temp file.
+ */
+ipcMain.handle('ftp:writeFile', async (event, connectionId, remotePath, content) => {
+  const entry = ftpConnections.get(connectionId);
+  if (!entry) return { success: false, error: 'No active FTP connection' };
+
+  const tmpPath = path.join(os.tmpdir(), 'termulos_ftp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
+  try {
+    fs.writeFileSync(tmpPath, content, 'utf-8');
+    await entry.client.uploadFrom(tmpPath, remotePath);
+    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+    return { success: true };
+  } catch (err) {
+    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+    return { success: false, error: err.message };
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
 // IPC: Local Filesystem
 // ═══════════════════════════════════════════════════════════════════════
 
@@ -1267,4 +1746,59 @@ ipcMain.handle('dialog:openFolder', async () => {
     properties: ['openDirectory']
   });
   return result;
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// IPC: Port Forwarding Tunnels
+// ═══════════════════════════════════════════════════════════════════════
+
+/**
+ * Get all saved port forwarding rules.
+ */
+ipcMain.handle('tunnel:getRules', () => {
+  return tunnelRules;
+});
+
+/**
+ * Save the full set of port forwarding rules (replaces all).
+ */
+ipcMain.handle('tunnel:saveRules', (event, rules) => {
+  tunnelRules = rules || [];
+  savePortForwardRules();
+  return true;
+});
+
+/**
+ * Start a port forwarding tunnel.
+ * @param {string} ruleId - The rule ID to start
+ * @param {string} connectionId - The SSH connection ID to tunnel through
+ */
+ipcMain.handle('tunnel:start', async (event, ruleId, connectionId) => {
+  return await startTunnel(ruleId, connectionId);
+});
+
+/**
+ * Stop an active port forwarding tunnel.
+ * @param {string} ruleId - The rule ID to stop
+ */
+ipcMain.handle('tunnel:stop', (event, ruleId) => {
+  return stopTunnel(ruleId);
+});
+
+/**
+ * Get the list of currently active tunnel rule IDs.
+ */
+ipcMain.handle('tunnel:listActive', () => {
+  const active = [];
+  for (const [ruleId, tunnel] of activeTunnels) {
+    active.push({
+      ruleId: ruleId,
+      localPort: tunnel.rule.localPort,
+      remoteHost: tunnel.rule.remoteHost || 'localhost',
+      remotePort: tunnel.rule.remotePort,
+      connectionId: tunnel.connectionId,
+      activeConnections: tunnel.sockets.size
+    });
+  }
+  return active;
 });

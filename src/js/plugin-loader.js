@@ -289,6 +289,12 @@ class PluginLoader {
       /** SSH access (live reference via getter) */
       get ssh() { return window.termulAPI.ssh; },
 
+      /** FTP access (live reference via getter) */
+      get ftp() { return window.termulAPI.ftp; },
+
+      /** Port forwarding tunnel access (live reference via getter) */
+      get tunnel() { return window.termulAPI.tunnel; },
+
       /** Current connection ID (live) */
       get connectionId() {
         return window.TermulOS?.os?.connectionId || null;

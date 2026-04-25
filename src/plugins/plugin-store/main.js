@@ -6,7 +6,7 @@
   // ─── Configuration ────────────────────────────────────────────────
   // Default store URL — user should change this to their published repo.
   // Format: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/store/
-  var DEFAULT_STORE_URL = 'https://raw.githubusercontent.com/username/TermulOS/main/store/';
+  var DEFAULT_STORE_URL = 'https://raw.githubusercontent.com/eindrawan/termul-os/refs/heads/main/store/';
 
   var storeUrl = DEFAULT_STORE_URL;
   var storePlugins = [];
@@ -116,7 +116,7 @@
     if (!urlInput) return;
     var newUrl = urlInput.value.trim();
     if (!newUrl) {
-      alert('Please enter a valid store URL.');
+      showAlert('Invalid URL', 'Please enter a valid store URL.');
       return;
     }
     if (!newUrl.endsWith('/')) {
@@ -275,11 +275,19 @@
     html += '</div>';
     contentEl.innerHTML = html;
 
-    // Bind install buttons
-    contentEl.querySelectorAll('.store-install-btn').forEach(function(btn) {
+    // Bind install/update buttons
+    contentEl.querySelectorAll('.tui-btn-primary[data-dir-name]').forEach(function(btn) {
       addEventListener(btn, 'click', function() {
         var dirName = btn.dataset.dirName;
         installPlugin(dirName, btn);
+      });
+    });
+
+    // Bind uninstall buttons
+    contentEl.querySelectorAll('.tui-btn-danger[data-dir-name]').forEach(function(btn) {
+      addEventListener(btn, 'click', function() {
+        var dirName = btn.dataset.dirName;
+        uninstallPlugin(dirName, btn);
       });
     });
   }
@@ -296,18 +304,20 @@
 
     var iconSvg = plugin.icon || '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="3" y="3" width="18" height="18" rx="4"/></svg>';
 
+    var uninstallBtn = '<button class="tui-btn tui-btn-danger" data-dir-name="' + plugin.dirName + '">' +
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>' +
+      'Uninstall</button>';
+
     var actionHtml = '';
     if (isInstalled && !hasUpdate) {
-      actionHtml = '<span class="store-status-badge installed">' +
-        '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M20 6L9 17l-5-5"/></svg>' +
-        'Installed</span>';
+      actionHtml = uninstallBtn;
     } else if (hasUpdate) {
       actionHtml = '<span class="store-status-badge update">v' + installedVersion + ' → v' + plugin.version + '</span>' +
-        '<button class="store-install-btn" data-dir-name="' + plugin.dirName + '">' +
+        '<button class="tui-btn tui-btn-primary" data-dir-name="' + plugin.dirName + '">' +
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
-        'Update</button>';
+        'Update</button>' + uninstallBtn;
     } else {
-      actionHtml = '<button class="store-install-btn" data-dir-name="' + plugin.dirName + '">' +
+      actionHtml = '<button class="tui-btn tui-btn-primary" data-dir-name="' + plugin.dirName + '">' +
         '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>' +
         'Install</button>';
     }
@@ -339,8 +349,8 @@
 
     // Disable button and show installing state
     if (btn) {
-      btn.classList.add('installing');
-      btn.innerHTML = '<div class="store-spinner" style="width:16px;height:16px;border-width:2px;"></div> Installing...';
+      btn.disabled = true;
+      btn.innerHTML = '<div class="tui-spinner" style="width:16px;height:16px;border-width:2px;"></div> Installing...';
     }
 
     try {
@@ -402,14 +412,98 @@
 
     } catch (err) {
       console.error('[PluginStore] Install failed:', err);
-      alert('Installation failed: ' + err.message);
-
-      // Restore button state
-      if (btn) {
-        btn.classList.remove('installing');
-        btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install';
-      }
+      showAlert('Installation Failed', err.message);
+      restoreInstallBtn(btn);
     }
+  }
+
+  /**
+   * Uninstall a plugin via PluginLoader.
+   * @param {string} dirName - The plugin directory name
+   * @param {HTMLElement} btn - The uninstall button element
+   */
+  async function uninstallPlugin(dirName, btn) {
+    if (!dirName) return;
+
+    var pluginName = dirName;
+    // Try to get friendly name from store index
+    var storeEntry = storePlugins.find(function(p) { return p.dirName === dirName; });
+    if (storeEntry && storeEntry.name) {
+      pluginName = storeEntry.name;
+    }
+
+    showConfirm(
+      'Uninstall Plugin',
+      'Are you sure you want to uninstall "' + pluginName + '"?',
+      function() {
+        doUninstall(dirName, btn);
+      }
+    );
+  }
+
+  async function doUninstall(dirName, btn) {
+    // Disable button during uninstall
+    if (btn) {
+      btn.disabled = true;
+      btn.innerHTML = '<div class="tui-spinner" style="width:14px;height:14px;border-width:2px;"></div>';
+    }
+
+    try {
+      var result = await window.PluginLoader.uninstall(dirName);
+      if (result.success) {
+        renderPluginList();
+      } else {
+        showAlert('Uninstall Failed', result.error || 'Unknown error.');
+        restoreUninstallBtn(btn);
+      }
+    } catch (err) {
+      showAlert('Uninstall Failed', err.message);
+      restoreUninstallBtn(btn);
+    }
+  }
+
+  function restoreUninstallBtn(btn) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg> Uninstall';
+  }
+
+  function restoreInstallBtn(btn) {
+    if (!btn) return;
+    btn.disabled = false;
+    btn.innerHTML = '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg> Install';
+  }
+
+  /**
+   * Show an alert modal using TuiModal component.
+   */
+  function showAlert(title, message) {
+    var modal = api.ui.modal({
+      title: title,
+      content: '<p class="tui-modal-message">' + escapeHtml(message) + '</p>',
+      buttons: [
+        { label: 'OK', variant: 'primary', onClick: function(m) { m.close(); } }
+      ]
+    });
+    modal.open();
+  }
+
+  /**
+   * Show a confirmation modal using TuiModal component.
+   * @param {string} title
+   * @param {string} message
+   * @param {Function} onConfirm - Called when user confirms
+   */
+  function showConfirm(title, message, onConfirm) {
+    var modal = api.ui.modal({
+      title: title,
+      content: '<p class="tui-modal-message">' + escapeHtml(message) + '</p>',
+      buttons: [
+        { label: 'Cancel', variant: 'default', onClick: function(m) { m.close(); } },
+        { label: 'Confirm', variant: 'danger', onClick: function(m) { m.close(); if (onConfirm) onConfirm(); } }
+      ]
+    });
+    modal.open();
   }
 
   /**
@@ -494,7 +588,7 @@
       '</div>' +
       '<p class="store-error-title">' + escapeHtml(title) + '</p>' +
       '<p class="store-error-message">' + escapeHtml(message) + '</p>' +
-      '<button class="store-install-btn" id="store-retry-btn" style="border-color:#0078D4;">Retry</button>' +
+      '<button class="tui-btn tui-btn-primary" id="store-retry-btn">Retry</button>' +
     '</div>';
 
     var retryBtn = shadow.getElementById('store-retry-btn');

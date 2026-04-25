@@ -268,35 +268,7 @@
   gap: 6px;
 }
 
-.store-install-btn {
-  padding: 8px 20px;
-  border: 1px solid var(--tui-accent-primary, #0078D4);
-  border-radius: 8px;
-  background: rgba(0, 120, 212, 0.1);
-  color: var(--tui-accent-primary, #60cdff);
-  font-size: 13px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.15s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-
-.store-install-btn:hover {
-  background: rgba(0, 120, 212, 0.2);
-}
-
-.store-install-btn:active {
-  transform: scale(0.97);
-}
-
-.store-install-btn.installing {
-  opacity: 0.6;
-  pointer-events: none;
-}
-
-.store-install-btn svg {
+.store-plugin-action .tui-btn svg {
   flex-shrink: 0;
 }
 

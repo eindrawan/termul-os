@@ -8,7 +8,11 @@ class Taskbar {
     this.onStartClick = null;
     this.onAppClick = null;
     this.onReconnectClick = null;
+    this.onTunnelToggle = null;
+    this.onTunnelOpenPlugin = null;
     this.clockInterval = null;
+    this._tunnelPopupVisible = false;
+    this._tunnelOutsideClickHandler = null;
   }
 
   init() {
@@ -38,6 +42,25 @@ class Taskbar {
         <div class="taskbar-connection-status" id="taskbar-connection-status">
           <!-- Connection status injected dynamically -->
         </div>
+        <div class="taskbar-tunnel-indicator" id="taskbar-tunnel-indicator" style="display:none" title="Port Forwarding">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <rect x="1" y="4" width="4" height="8" rx="1" fill="currentColor" opacity="0.3"/>
+            <rect x="11" y="4" width="4" height="8" rx="1" fill="currentColor" opacity="0.3"/>
+            <rect x="1" y="4" width="4" height="8" rx="1"/>
+            <rect x="11" y="4" width="4" height="8" rx="1"/>
+            <line x1="5" y1="8" x2="11" y2="8"/>
+            <polyline points="9,5.5 11.5,8 9,10.5"/>
+          </svg>
+          <span class="tunnel-count" id="taskbar-tunnel-count">0</span>
+        </div>
+        <!-- Tunnel popup (positioned above tray) -->
+        <div class="taskbar-tunnel-popup" id="taskbar-tunnel-popup" style="display:none">
+          <div class="tunnel-popup-header">Port Forward Rules</div>
+          <div class="tunnel-popup-list" id="tunnel-popup-list"></div>
+          <div class="tunnel-popup-footer">
+            <button class="tunnel-popup-open-btn" id="tunnel-popup-open-btn">Open Port Forwarder</button>
+          </div>
+        </div>
         <div class="taskbar-clock" id="taskbar-clock">
           <span class="clock-time"></span>
           <span class="clock-date"></span>
@@ -56,6 +79,23 @@ class Taskbar {
       if (appBtn && this.onAppClick) {
         this.onAppClick(appBtn.dataset.windowId);
       }
+    });
+
+    // Tunnel indicator click → toggle popup
+    document.getElementById('taskbar-tunnel-indicator').addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.toggleTunnelPopup();
+    });
+
+    // Popup "Open Port Forwarder" button
+    document.getElementById('tunnel-popup-open-btn').addEventListener('click', () => {
+      this.closeTunnelPopup();
+      if (this.onTunnelOpenPlugin) this.onTunnelOpenPlugin();
+    });
+
+    // Prevent popup from closing when clicking inside it
+    document.getElementById('taskbar-tunnel-popup').addEventListener('click', (e) => {
+      e.stopPropagation();
     });
   }
 
@@ -122,6 +162,110 @@ class Taskbar {
         </div>
       `;
     }
+  }
+
+  /**
+   * Update the tunnel indicator in the taskbar tray.
+   * @param {Array<{id:string, name:string, localPort:number, remotePort:number, remoteHost:string, enabled:boolean}>} rules
+   */
+  updateTunnelStatus(rules) {
+    const indicator = document.getElementById('taskbar-tunnel-indicator');
+    const countEl = document.getElementById('taskbar-tunnel-count');
+    if (!indicator || !countEl) return;
+
+    if (!rules || rules.length === 0) {
+      indicator.style.display = 'none';
+      this.closeTunnelPopup();
+      return;
+    }
+
+    indicator.style.display = '';
+
+    const activeCount = rules.filter(r => r.enabled).length;
+    countEl.textContent = activeCount;
+
+    if (activeCount > 0) {
+      indicator.classList.add('has-active');
+    } else {
+      indicator.classList.remove('has-active');
+    }
+
+    // Update popup list content
+    this._updateTunnelPopup(rules);
+  }
+
+  _updateTunnelPopup(rules) {
+    const listEl = document.getElementById('tunnel-popup-list');
+    if (!listEl) return;
+
+    if (rules.length === 0) {
+      listEl.innerHTML = '<div class="tunnel-popup-empty">No rules configured</div>';
+      return;
+    }
+
+    listEl.innerHTML = rules.map(rule => {
+      const remoteHost = rule.remoteHost || 'localhost';
+      return `<div class="tunnel-popup-rule" data-rule-id="${rule.id}">
+        <div class="tunnel-popup-rule-info">
+          <div class="tunnel-popup-rule-name">${this._escapeHtml(rule.name)}</div>
+          <div class="tunnel-popup-rule-ports">:${rule.localPort} → ${this._escapeHtml(remoteHost)}:${rule.remotePort}</div>
+        </div>
+        <button class="tui-toggle ${rule.enabled ? 'active' : ''}" data-tunnel-toggle="${rule.id}" role="switch" aria-checked="${rule.enabled}"></button>
+      </div>`;
+    }).join('');
+
+    // Bind toggle buttons
+    listEl.querySelectorAll('[data-tunnel-toggle]').forEach(btn => {
+      btn.addEventListener('click', () => {
+        const ruleId = btn.dataset.tunnelToggle;
+        const isActive = btn.classList.contains('active');
+        if (this.onTunnelToggle) {
+          this.onTunnelToggle(ruleId, !isActive);
+        }
+      });
+    });
+  }
+
+  toggleTunnelPopup() {
+    if (this._tunnelPopupVisible) {
+      this.closeTunnelPopup();
+    } else {
+      this.openTunnelPopup();
+    }
+  }
+
+  openTunnelPopup() {
+    const popup = document.getElementById('taskbar-tunnel-popup');
+    if (!popup) return;
+
+    popup.style.display = '';
+    this._tunnelPopupVisible = true;
+
+    // Close on outside click
+    this._tunnelOutsideClickHandler = (e) => {
+      if (!popup.contains(e.target)) {
+        this.closeTunnelPopup();
+      }
+    };
+    setTimeout(() => document.addEventListener('click', this._tunnelOutsideClickHandler), 0);
+  }
+
+  closeTunnelPopup() {
+    const popup = document.getElementById('taskbar-tunnel-popup');
+    if (popup) popup.style.display = 'none';
+
+    this._tunnelPopupVisible = false;
+
+    if (this._tunnelOutsideClickHandler) {
+      document.removeEventListener('click', this._tunnelOutsideClickHandler);
+      this._tunnelOutsideClickHandler = null;
+    }
+  }
+
+  _escapeHtml(text) {
+    const div = document.createElement('div');
+    div.appendChild(document.createTextNode(text || ''));
+    return div.innerHTML;
   }
 
   startClock() {
