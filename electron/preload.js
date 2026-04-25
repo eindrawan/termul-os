@@ -97,6 +97,12 @@ contextBridge.exposeInMainWorld('termulAPI', {
     openFolder: () => ipcRenderer.invoke('dialog:openFolder'),
   },
 
+  // ─── Settings Persistence ─────────────────────────────────────────
+  settings: {
+    get: (key, defaultValue) => ipcRenderer.invoke('settings:get', key, defaultValue),
+    set: (key, value) => ipcRenderer.invoke('settings:set', key, value),
+  },
+
   // ─── Platform Info ──────────────────────────────────────────────────
   platform: process.platform,
 

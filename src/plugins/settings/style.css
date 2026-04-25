@@ -98,3 +98,27 @@
   color: var(--tui-text-primary, #ffffff);
   font-weight: 500;
 }
+
+/* Desktop Background controls */
+.tui-bg-controls {
+  display: flex;
+  gap: 8px;
+}
+
+.tui-bg-preview-container {
+  margin-top: 12px;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: 8px;
+}
+
+.tui-bg-preview {
+  width: 100%;
+  height: 120px;
+  border-radius: 6px;
+  background: linear-gradient(135deg, #0c0c0c 0%, #1a1a2e 25%, #0f1419 50%, #1a1a2e 75%, #16213e 100%);
+  background-size: cover;
+  background-position: center;
+  background-repeat: no-repeat;
+}

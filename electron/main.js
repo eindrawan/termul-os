@@ -8,6 +8,7 @@ const SRC_DIR = path.join(__dirname, '..', 'src');
 const PLUGINS_DIR = path.join(SRC_DIR, 'plugins');
 const USER_DATA = app.getPath('userData');
 const PROFILES_FILE = path.join(USER_DATA, 'profiles.json');
+const SETTINGS_FILE = path.join(USER_DATA, 'settings.json');
 
 // ─── Monaco Editor custom protocol ─────────────────────────────────
 // Must be registered BEFORE app.whenReady()
@@ -20,11 +21,22 @@ protocol.registerSchemesAsPrivileged([{
     corsEnabled: true,
     bypassCSP: true,
   }
+}, {
+  scheme: 'localfile',
+  privileges: {
+    standard: true,
+    secure: true,
+    supportFetchAPI: true,
+    corsEnabled: true,
+    bypassCSP: true,
+  }
 }]);
 
 // ─── State ───────────────────────────────────────────────────────────
 let mainWindow = null;
 let sshConnections = new Map();
+let isManuallyMaximized = false;
+let preMaximizeBounds = null;
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -107,11 +119,16 @@ function createMainWindow() {
     mainWindow.show();
   });
 
-  // Fix: frameless transparent windows on Windows extend behind the taskbar
-  // when maximized. Reduce height by 8px to keep the taskbar visible.
+  // Keep isManuallyMaximized in sync with native maximize events
+  // (e.g. Windows Snap, double-click on -webkit-app-region: drag)
   mainWindow.on('maximize', () => {
-    const { width } = mainWindow.getBounds();
-    mainWindow.setSize(width, screen.getPrimaryDisplay().workAreaSize.height - 8);
+    if (!isManuallyMaximized) {
+      preMaximizeBounds = null; // Native maximize — no saved bounds
+    }
+    isManuallyMaximized = true;
+  });
+  mainWindow.on('unmaximize', () => {
+    isManuallyMaximized = false;
   });
 
   mainWindow.on('closed', () => {
@@ -153,6 +170,37 @@ app.whenReady().then(() => {
     }
   });
 
+  // Register localfile:// protocol to serve local files (e.g. desktop backgrounds)
+  // The URL format uses a hash fragment to carry the raw file path, avoiding
+  // browser URL parsing issues with Windows drive letters (C: being treated as hostname).
+  // Example: localfile://bg#/C:/Users/test/image.jpg
+  protocol.handle('localfile', async (request) => {
+    try {
+      // Extract the hash fragment which contains the unmodified file path
+      const hashIndex = request.url.indexOf('#');
+      if (hashIndex === -1) {
+        return new Response('Missing path', { status: 400 });
+      }
+      const filePath = decodeURIComponent(request.url.substring(hashIndex + 1));
+
+      const data = await fs.promises.readFile(filePath);
+      // Determine MIME type from extension
+      const ext = path.extname(filePath).toLowerCase();
+      const mimeMap = {
+        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
+        '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp',
+        '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+      };
+      const mime = mimeMap[ext] || 'application/octet-stream';
+      return new Response(data, {
+        headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' }
+      });
+    } catch (e) {
+      console.error('[localfile protocol] Error:', request.url, e.message);
+      return new Response('Not found', { status: 404 });
+    }
+  });
+
   createMainWindow();
 
   app.on('activate', () => {
@@ -177,14 +225,29 @@ app.on('window-all-closed', () => {
 // ═══════════════════════════════════════════════════════════════════════
 ipcMain.handle('window:minimize', () => mainWindow?.minimize());
 ipcMain.handle('window:maximize', () => {
-  if (mainWindow?.isMaximized()) {
-    mainWindow.unmaximize();
+  if (!mainWindow) return;
+  if (isManuallyMaximized) {
+    // Restore to previous bounds
+    if (preMaximizeBounds) {
+      mainWindow.setBounds(preMaximizeBounds);
+    }
+    isManuallyMaximized = false;
   } else {
-    mainWindow?.maximize();
+    // Save current bounds before maximizing
+    preMaximizeBounds = mainWindow.getBounds();
+    // Use workArea which already accounts for the Windows taskbar
+    const workArea = screen.getPrimaryDisplay().workArea;
+    mainWindow.setBounds({
+      x: workArea.x,
+      y: workArea.y,
+      width: workArea.width,
+      height: workArea.height
+    });
+    isManuallyMaximized = true;
   }
 });
 ipcMain.handle('window:close', () => mainWindow?.close());
-ipcMain.handle('window:isMaximized', () => mainWindow?.isMaximized());
+ipcMain.handle('window:isMaximized', () => isManuallyMaximized);
 
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: Profiles
@@ -1155,6 +1218,39 @@ ipcMain.handle('fs:writeFile', (event, filePath, content, encoding) => {
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
+  }
+});
+
+// ═══════════════════════════════════════════════════════════════════════
+// IPC: Settings Persistence
+// ═══════════════════════════════════════════════════════════════════════
+
+ipcMain.handle('settings:get', (event, key, defaultValue) => {
+  try {
+    if (!fs.existsSync(SETTINGS_FILE)) return defaultValue !== undefined ? defaultValue : null;
+    const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    return data[key] !== undefined ? data[key] : (defaultValue !== undefined ? defaultValue : null);
+  } catch {
+    return defaultValue !== undefined ? defaultValue : null;
+  }
+});
+
+ipcMain.handle('settings:set', (event, key, value) => {
+  try {
+    let data = {};
+    if (fs.existsSync(SETTINGS_FILE)) {
+      data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+    }
+    if (value === null || value === undefined) {
+      delete data[key];
+    } else {
+      data[key] = value;
+    }
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    return true;
+  } catch (err) {
+    console.error('[settings:set] Error:', err);
+    return false;
   }
 });
 

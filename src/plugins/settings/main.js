@@ -184,6 +184,24 @@
           '<div id="blur-intensity-select"></div>' +
         '</div>' +
       '</div>' +
+    '</div>' +
+    '<div class="tui-section">' +
+      '<div class="tui-section-title">Desktop Background</div>' +
+      '<div class="tui-settings-item">' +
+        '<div class="tui-settings-item-info">' +
+          '<div class="tui-settings-item-label">Wallpaper</div>' +
+          '<div class="tui-settings-item-desc" id="bg-filename">Default gradient</div>' +
+        '</div>' +
+        '<div class="tui-settings-item-control">' +
+          '<div class="tui-bg-controls">' +
+            '<button class="tui-btn tui-btn-default" id="bg-browse-btn">Browse</button>' +
+            '<button class="tui-btn tui-btn-default" id="bg-reset-btn" style="display:none">Reset</button>' +
+          '</div>' +
+        '</div>' +
+      '</div>' +
+      '<div class="tui-bg-preview-container">' +
+        '<div class="tui-bg-preview" id="bg-preview"></div>' +
+      '</div>' +
     '</div>',
 
     plugins: '<div class="tui-section">' +
@@ -269,7 +287,7 @@
     }
   }
 
-  function initAppearanceSection() {
+  async function initAppearanceSection() {
     // Accent color custom select using TuiDropdown
     createCustomSelect(
       'accent-color-select',
@@ -304,6 +322,99 @@
         document.documentElement.style.setProperty('--blur-intensity', blur);
       }
     );
+
+    // Desktop background controls
+    var bgBrowseBtn = shadow.getElementById('bg-browse-btn');
+    var bgResetBtn = shadow.getElementById('bg-reset-btn');
+    var bgFilename = shadow.getElementById('bg-filename');
+    var bgPreview = shadow.getElementById('bg-preview');
+
+    // Determine the per-profile settings key
+    var profileId = api.profile ? api.profile.id : null;
+    var bgSettingsKey = profileId ? 'desktopBackground:' + profileId : null;
+
+    // If no profile context, disable background controls
+    if (!bgSettingsKey) {
+      if (bgBrowseBtn) bgBrowseBtn.disabled = true;
+      if (bgFilename) bgFilename.textContent = 'No active profile';
+      return;
+    }
+
+    // Load saved background setting for this profile
+    try {
+      var savedBg = await window.termulAPI.settings.get(bgSettingsKey, null);
+      if (savedBg) {
+        var normalizedBg = savedBg.replace(/\\/g, '/');
+        bgFilename.textContent = savedBg.split(/[/\\]/).pop();
+        bgPreview.style.backgroundImage = "url('localfile://bg#" + encodeURIComponent(normalizedBg) + "')";
+        bgResetBtn.style.display = '';
+      }
+    } catch (e) {
+      // Ignore errors loading saved background
+    }
+
+    // Browse button — open local file dialog
+    if (bgBrowseBtn) {
+      addEventListener(bgBrowseBtn, 'click', async function() {
+        var result = await window.termulAPI.dialog.openFile({
+          title: 'Select Desktop Background',
+          filters: [
+            { name: 'Images', extensions: ['jpg', 'jpeg', 'png', 'gif', 'bmp', 'webp', 'svg'] },
+            { name: 'All Files', extensions: ['*'] }
+          ],
+          properties: ['openFile']
+        });
+        if (!result.canceled && result.filePaths.length > 0) {
+          var filePath = result.filePaths[0];
+          applyDesktopBackground(filePath, bgSettingsKey);
+          // Update UI in settings panel
+          var normalized = filePath.replace(/\\/g, '/');
+          bgFilename.textContent = filePath.split(/[/\\]/).pop();
+          bgPreview.style.backgroundImage = "url('localfile://bg#" + encodeURIComponent(normalized) + "')";
+          bgResetBtn.style.display = '';
+        }
+      });
+    }
+
+    // Reset button — restore default gradient
+    if (bgResetBtn) {
+      addEventListener(bgResetBtn, 'click', async function() {
+        resetDesktopBackground(bgSettingsKey);
+        bgFilename.textContent = 'Default gradient';
+        bgPreview.style.backgroundImage = '';
+        bgResetBtn.style.display = 'none';
+      });
+    }
+  }
+
+  /**
+   * Apply a custom desktop background image for a specific profile.
+   * Sets the background on the #app element and persists the path.
+   */
+  function applyDesktopBackground(filePath, settingsKey) {
+    var app = document.getElementById('app');
+    if (app) {
+      var normalized = filePath.replace(/\\/g, '/');
+      app.style.backgroundImage = "url('localfile://bg#" + encodeURIComponent(normalized) + "')";
+      app.style.backgroundSize = 'cover';
+      app.style.backgroundPosition = 'center';
+      app.style.animation = 'none';
+    }
+    window.termulAPI.settings.set(settingsKey, filePath);
+  }
+
+  /**
+   * Reset desktop background to the default gradient for a specific profile.
+   */
+  function resetDesktopBackground(settingsKey) {
+    var app = document.getElementById('app');
+    if (app) {
+      app.style.backgroundImage = '';
+      app.style.backgroundSize = '';
+      app.style.backgroundPosition = '';
+      app.style.animation = '';
+    }
+    window.termulAPI.settings.set(settingsKey, null);
   }
 
   async function initPluginsSection() {

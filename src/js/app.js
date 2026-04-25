@@ -598,8 +598,8 @@ class TermulOS {
     window.StartMenu.onClose = (action) => {
       if (action === 'power') {
         this.disconnectAllAndReturnToDialog();
+        window.StartMenu.close();
       }
-      window.StartMenu.close();
     };
 
     // Initialize dashboard widgets
@@ -609,6 +609,48 @@ class TermulOS {
 
     // Start taskbar update loop
     this.taskbarLoop = setInterval(() => this.updateTaskbar(), 500);
+  }
+
+  /**
+   * Load and apply the saved desktop background for a specific profile.
+   * @param {Object} profile - The connection profile (must have .id)
+   */
+  async applyProfileBackground(profile) {
+    const app = document.getElementById('app');
+    if (!app || !profile || !profile.id) return;
+
+    try {
+      const key = 'desktopBackground:' + profile.id;
+      const savedBg = await window.termulAPI.settings.get(key, null);
+      if (savedBg) {
+        const normalizedPath = savedBg.replace(/\\/g, '/');
+        app.style.backgroundImage = "url('localfile://bg#" + encodeURIComponent(normalizedPath) + "')";
+        app.style.backgroundSize = 'cover';
+        app.style.backgroundPosition = 'center';
+        app.style.animation = 'none';
+      } else {
+        // No custom background for this profile — restore default gradient
+        app.style.backgroundImage = '';
+        app.style.backgroundSize = '';
+        app.style.backgroundPosition = '';
+        app.style.animation = '';
+      }
+    } catch (e) {
+      console.warn('[TermulOS] Failed to load desktop background for profile:', profile.id, e);
+    }
+  }
+
+  /**
+   * Reset desktop background to the default gradient.
+   */
+  resetDesktopBackground() {
+    const app = document.getElementById('app');
+    if (app) {
+      app.style.backgroundImage = '';
+      app.style.backgroundSize = '';
+      app.style.backgroundPosition = '';
+      app.style.animation = '';
+    }
   }
 
   /**
@@ -722,12 +764,6 @@ class TermulOS {
     // Switch to the new tab (also renders tabs and updates taskbar)
     this.switchTab(tabId);
 
-    // Auto-open terminal for this tab
-    const terminalPlugin = this.plugins.find(p => p.dirName === 'terminal');
-    if (terminalPlugin) {
-      this.launchApp(terminalPlugin);
-    }
-
     // Update username in start menu
     this.updateStartMenuUser(profile);
   }
@@ -763,6 +799,9 @@ class TermulOS {
 
     // Update start menu username
     this.updateStartMenuUser(tab.profile);
+
+    // Apply this profile's desktop background
+    this.applyProfileBackground(tab.profile);
 
     // Notify dashboard widgets of tab switch so they can follow the active connection
     document.dispatchEvent(new CustomEvent('termul:tab-switched', {
@@ -1085,6 +1124,9 @@ class TermulOS {
     window.ConnectionManager.currentConnection = null;
 
     window.Taskbar.destroy();
+
+    // Reset desktop background to default
+    this.resetDesktopBackground();
 
     // Destroy dashboard widgets
     if (window.DashboardWidgets) {
