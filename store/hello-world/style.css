@@ -1,0 +1,174 @@
+.hello-world-container {
+  width: 100%;
+  height: 100%;
+  overflow-y: auto;
+  background: var(--tui-bg-surface, #0f0f0f);
+  color: var(--tui-text-primary, #e0e0e0);
+}
+
+.hw-hero {
+  text-align: center;
+  padding: 32px 24px 20px;
+  background: linear-gradient(180deg, rgba(255, 140, 0, 0.08) 0%, transparent 100%);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.08));
+}
+
+.hw-icon {
+  width: 64px;
+  height: 64px;
+  margin: 0 auto 16px;
+  border-radius: 16px;
+  background: rgba(255, 140, 0, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.hw-icon svg {
+  width: 40px;
+  height: 40px;
+}
+
+.hw-title {
+  font-size: 24px;
+  font-weight: 600;
+  color: var(--tui-text-primary, #ffffff);
+  margin: 0 0 8px;
+}
+
+.hw-subtitle {
+  font-size: 14px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  margin: 0;
+}
+
+.hw-content {
+  padding: 20px 24px;
+}
+
+.hw-info-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 24px;
+}
+
+.hw-info-card {
+  display: flex;
+  gap: 12px;
+  padding: 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: 10px;
+  transition: background 0.2s;
+}
+
+.hw-info-card:hover {
+  background: rgba(255, 255, 255, 0.05);
+}
+
+.hw-info-icon {
+  flex-shrink: 0;
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  background: rgba(0, 103, 192, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--tui-accent-primary, #60cdff);
+}
+
+.hw-info-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.hw-info-text strong {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tui-text-primary, #ffffff);
+}
+
+.hw-info-text span {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  line-height: 1.4;
+}
+
+.hw-counter-section {
+  text-align: center;
+  margin-bottom: 20px;
+  padding: 20px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  border-radius: 10px;
+}
+
+.hw-counter-label {
+  font-size: 13px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  margin: 0 0 12px;
+}
+
+.hw-counter-controls {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+}
+
+.hw-counter-btn {
+  width: 40px;
+  height: 40px;
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.12));
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.05);
+  color: var(--tui-text-primary, #ffffff);
+  font-size: 20px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s;
+}
+
+.hw-counter-btn:hover {
+  background: rgba(255, 255, 255, 0.1);
+  border-color: var(--tui-accent-primary, #60cdff);
+}
+
+.hw-counter-btn:active {
+  transform: scale(0.95);
+}
+
+.hw-counter-value {
+  font-size: 28px;
+  font-weight: 700;
+  min-width: 60px;
+  text-align: center;
+  color: var(--tui-accent-primary, #60cdff);
+  font-variant-numeric: tabular-nums;
+}
+
+.hw-time-section {
+  text-align: center;
+  padding: 16px;
+}
+
+.hw-time-label {
+  font-size: 13px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+  margin: 0 0 6px;
+}
+
+.hw-time-value {
+  font-size: 20px;
+  font-weight: 600;
+  color: var(--tui-text-primary, #ffffff);
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-family: 'Segoe UI', system-ui, sans-serif;
+}

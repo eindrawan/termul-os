@@ -1,0 +1,13 @@
+{
+  "name": "Hello World",
+  "description": "A simple hello world plugin to demonstrate the TermulOS plugin store and installation flow.",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "hello-world",
+  "system": false,
+  "window": {
+    "width": 500,
+    "height": 400
+  },
+  "permissions": []
+}

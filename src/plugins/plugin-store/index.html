@@ -1,0 +1,57 @@
+<div class="store-container">
+  <div class="store-header">
+    <div class="store-header-info">
+      <h2 class="store-title">Plugin Store</h2>
+      <p class="store-subtitle">Browse and install community plugins</p>
+    </div>
+    <div class="store-header-actions">
+      <div class="store-search-wrapper" id="store-search-wrapper">
+        <svg class="store-search-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><path d="M21 21l-4.35-4.35"/>
+        </svg>
+        <input type="text" class="store-search-input" id="store-search" placeholder="Search plugins..." />
+      </div>
+      <button class="store-settings-btn" id="store-settings-btn" title="Store Settings">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06A1.65 1.65 0 0 0 4.68 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06A1.65 1.65 0 0 0 9 4.68a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06A1.65 1.65 0 0 0 19.4 9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+        </svg>
+      </button>
+      <button class="store-refresh-btn" id="store-refresh-btn" title="Refresh Store">
+        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <div class="store-content" id="store-content">
+    <!-- Loading state -->
+    <div class="store-loading" id="store-loading">
+      <div class="store-spinner"></div>
+      <p>Loading store...</p>
+    </div>
+  </div>
+
+  <!-- Settings Panel (hidden by default) -->
+  <div class="store-settings-panel" id="store-settings-panel" style="display:none;">
+    <div class="store-settings-header">
+      <h3>Store Settings</h3>
+      <button class="store-settings-close" id="store-settings-close">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+        </svg>
+      </button>
+    </div>
+    <div class="store-settings-body">
+      <div class="store-settings-item">
+        <label class="store-settings-label">Store Repository URL</label>
+        <p class="store-settings-desc">The GitHub raw URL to the store folder. Format: https://raw.githubusercontent.com/{owner}/{repo}/{branch}/store/</p>
+        <input type="text" class="store-settings-input" id="store-url-input" placeholder="https://raw.githubusercontent.com/owner/repo/main/store/" />
+      </div>
+      <div class="store-settings-actions">
+        <button class="tui-btn tui-btn-default" id="store-url-save">Save & Reload</button>
+        <button class="tui-btn tui-btn-default" id="store-url-reset">Reset Default</button>
+      </div>
+    </div>
+  </div>
+</div>

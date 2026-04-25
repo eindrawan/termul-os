@@ -1,0 +1,13 @@
+{
+  "name": "Plugin Store",
+  "description": "Browse and install plugins from the TermulOS Store",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "plugin-store",
+  "system": true,
+  "window": {
+    "width": 750,
+    "height": 600
+  },
+  "permissions": []
+}

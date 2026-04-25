@@ -1,0 +1,81 @@
+<div class="hello-world-container">
+  <div class="hw-hero">
+    <div class="hw-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <linearGradient id="hwGradInner" x1="0%" y1="0%" x2="100%" y2="100%">
+            <stop offset="0%" style="stop-color:#FF8C00;stop-opacity:1" />
+            <stop offset="100%" style="stop-color:#FF6347;stop-opacity:1" />
+          </linearGradient>
+        </defs>
+        <rect x="3" y="3" width="18" height="18" rx="4" fill="url(#hwGradInner)"/>
+        <text x="12" y="16.5" text-anchor="middle" font-size="10" font-weight="bold" fill="white" font-family="sans-serif">Hi</text>
+      </svg>
+    </div>
+    <h1 class="hw-title">Hello, World!</h1>
+    <p class="hw-subtitle">Welcome to your first TermulOS plugin from the Store.</p>
+  </div>
+
+  <div class="hw-content">
+    <div class="hw-info-grid">
+      <div class="hw-info-card">
+        <div class="hw-info-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="10"/><path d="M12 16v-4"/><path d="M12 8h.01"/>
+          </svg>
+        </div>
+        <div class="hw-info-text">
+          <strong>Plugin System</strong>
+          <span>This plugin was installed from the TermulOS Store via GitHub.</span>
+        </div>
+      </div>
+      <div class="hw-info-card">
+        <div class="hw-info-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/>
+          </svg>
+        </div>
+        <div class="hw-info-text">
+          <strong>Quick & Easy</strong>
+          <span>Install plugins with a single click — no manual setup needed.</span>
+        </div>
+      </div>
+      <div class="hw-info-card">
+        <div class="hw-info-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7"/><rect x="14" y="3" width="7" height="7"/><rect x="14" y="14" width="7" height="7"/><rect x="3" y="14" width="7" height="7"/>
+          </svg>
+        </div>
+        <div class="hw-info-text">
+          <strong>Shadow DOM</strong>
+          <span>Each plugin is fully isolated with its own scoped styles and DOM.</span>
+        </div>
+      </div>
+      <div class="hw-info-card">
+        <div class="hw-info-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+          </svg>
+        </div>
+        <div class="hw-info-text">
+          <strong>Sandboxed</strong>
+          <span>Plugins run in a secure sandbox with tracked resources and auto-cleanup.</span>
+        </div>
+      </div>
+    </div>
+
+    <div class="hw-counter-section">
+      <p class="hw-counter-label">Interactive counter demo:</p>
+      <div class="hw-counter-controls">
+        <button class="hw-counter-btn hw-dec-btn" id="hw-dec">−</button>
+        <span class="hw-counter-value" id="hw-counter">0</span>
+        <button class="hw-counter-btn hw-inc-btn" id="hw-inc">+</button>
+      </div>
+    </div>
+
+    <div class="hw-time-section">
+      <p class="hw-time-label">Current time:</p>
+      <p class="hw-time-value" id="hw-time">--:--:--</p>
+    </div>
+  </div>
+</div>
