@@ -28,3 +28,6 @@ desktop.ini
 
 # Electron-builder
 electron-builder.log
+
+
+src/plugins/docker/

@@ -26,6 +26,10 @@
   // Stored callback references for proper cleanup
   var _shellDataCb = null;
   var _shellClosedCb = null;
+  var _runCommandCb = null;
+
+  // Queue of commands to run once the shell is ready
+  var _pendingCommands = [];
 
   // Elements (resolved after mount)
   var container, termContainer, statusEl;
@@ -59,6 +63,21 @@
     if (profileNameEl && profile) {
       profileNameEl.textContent = profile.name || profile.host;
     }
+
+    // Listen for external commands (e.g. docker exec from Docker plugin)
+    _runCommandCb = function(detail) {
+      if (!detail || !detail.command) return;
+      // Only handle commands targeted at this terminal window
+      if (detail.windowId && detail.windowId !== api.windowId) return;
+      if (isConnected && shellStreamId) {
+        // Shell is ready — write command immediately
+        api.ssh.shellWrite(shellStreamId, detail.command + '\n');
+      } else {
+        // Shell not ready yet — queue for execution after connect
+        _pendingCommands.push(detail.command);
+      }
+    };
+    api.events.on('terminal-run-command', _runCommandCb);
 
     // Create xterm.js Terminal instance
     initTerminal();
@@ -215,6 +234,16 @@
           }, 200);
         }
 
+        // Flush any queued commands from external sources (e.g. docker exec)
+        if (_pendingCommands.length > 0) {
+          setTimeout(function() {
+            for (var i = 0; i < _pendingCommands.length; i++) {
+              api.ssh.shellWrite(shellStreamId, _pendingCommands[i] + '\n');
+            }
+            _pendingCommands = [];
+          }, 500);
+        }
+
         term.focus();
       } else {
         if (term) term.writeln('\x1b[31mFailed to create shell: ' + result.error + '\x1b[0m');
@@ -283,10 +312,15 @@
       api.events.off('shell-closed', _shellClosedCb);
       _shellClosedCb = null;
     }
+    if (_runCommandCb) {
+      api.events.off('terminal-run-command', _runCommandCb);
+      _runCommandCb = null;
+    }
     if (shellStreamId) {
       api.ssh.shellClose(shellStreamId);
     }
     isConnected = false;
     shellStreamId = null;
+    _pendingCommands = [];
   }
 })();

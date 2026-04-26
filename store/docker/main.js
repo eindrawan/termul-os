@@ -625,13 +625,11 @@
     const container = state.containers.find(c => c.id === id);
     if (!container) return;
 
-    // Execute docker exec via terminal plugin
-    // We'll dispatch an event that terminal can listen to, or use ssh exec directly
-    // For now, let's create a shell command
-    const shellCmd = 'docker exec -it ' + id + ' sh -c "command -v bash >/dev/null 2>&1 && exec bash || exec sh"';
+    // Build the docker exec command, respecting sudo if needed
+    const dockerBin = state.useSudo ? 'sudo docker' : 'docker';
+    const shellCmd = dockerBin + ' exec -it ' + id + ' sh -c "command -v bash >/dev/null 2>&1 && exec bash || exec sh"';
 
-    // We need to open the terminal plugin with this command
-    // The best way is to dispatch a custom event that app.js can handle
+    // Dispatch event that app.js handles by opening a terminal window
     document.dispatchEvent(new CustomEvent('termul:docker-open-shell', {
       detail: { containerId: id, containerName: container.name, command: shellCmd }
     }));

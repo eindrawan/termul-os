@@ -102,6 +102,11 @@ class TermulOS {
     document.addEventListener('termul:open-in-editor', (e) => {
       this.openFileInEditor(e.detail);
     });
+
+    // Listen for "open docker shell" events from Docker plugin
+    document.addEventListener('termul:docker-open-shell', (e) => {
+      this.openDockerShell(e.detail);
+    });
   }
 
   /**
@@ -154,12 +159,30 @@ class TermulOS {
 
     container.appendChild(dialogView);
 
+    // Window-level close button (frameless window has no native controls)
+    const windowCloseBtn = document.createElement('button');
+    windowCloseBtn.className = 'window-close-btn';
+    windowCloseBtn.id = 'window-close-btn';
+    windowCloseBtn.title = 'Close';
+    windowCloseBtn.innerHTML = `
+      <svg width="10" height="10" viewBox="0 0 10 10">
+        <line x1="0" y1="0" x2="10" y2="10" stroke="currentColor" stroke-width="1.2"/>
+        <line x1="10" y1="0" x2="0" y2="10" stroke="currentColor" stroke-width="1.2"/>
+      </svg>
+    `;
+    container.appendChild(windowCloseBtn);
+
     // Load saved profiles
     await this.loadProfiles();
 
     // Event: new profile button
     document.getElementById('dialog-new-profile').addEventListener('click', () => {
       this.showProfileForm(window.ConnectionManager.createBlankProfile());
+    });
+
+    // Event: window close button
+    document.getElementById('window-close-btn')?.addEventListener('click', () => {
+      window.termulAPI.window.close();
     });
   }
 
@@ -812,6 +835,48 @@ class TermulOS {
       };
       setTimeout(waitForMount, 100);
     }
+  }
+
+  /**
+   * Open a terminal window and run a docker exec command (from Docker plugin).
+   * @param {Object} detail - { containerId: string, containerName: string, command: string }
+   */
+  openDockerShell(detail) {
+    if (!detail || !detail.command) return;
+
+    // Find the terminal plugin manifest
+    const terminalPlugin = this.plugins.find(p => p.dirName === 'terminal');
+    if (!terminalPlugin) {
+      console.warn('[TermulOS] terminal plugin not found');
+      return;
+    }
+
+    // Open a new terminal window
+    const windowId = window.WindowManager.open(terminalPlugin);
+
+    // Re-focus after the current event finishes bubbling
+    setTimeout(() => {
+      window.WindowManager.focus(windowId);
+    }, 0);
+
+    // Wait for terminal plugin to mount, then send the command
+    const waitForMount = () => {
+      const instance = window.PluginLoader.instances.get(windowId);
+      if (instance && instance._lifecycle && instance._lifecycle.onMount) {
+        // Plugin has mounted — dispatch the command event after a delay
+        // to give the shell time to connect. Include windowId so only
+        // the target terminal instance handles it.
+        setTimeout(() => {
+          document.dispatchEvent(new CustomEvent('termul:terminal-run-command', {
+            detail: { command: detail.command, windowId: windowId }
+          }));
+        }, 300);
+      } else {
+        // Not yet mounted, retry
+        setTimeout(waitForMount, 100);
+      }
+    };
+    setTimeout(waitForMount, 100);
   }
 
   /* ═════════════════════════════════════════════════════════════════════

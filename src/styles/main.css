@@ -350,6 +350,25 @@ input {
   box-shadow: var(--shadow-md);
 }
 
+.window-close-btn {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 46px;
+  height: 32px;
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+  transition: all var(--transition-fast);
+}
+
+.window-close-btn:hover {
+  background: #E81123;
+  color: white;
+}
+
 .dialog-main {
   flex: 1;
   display: flex;
