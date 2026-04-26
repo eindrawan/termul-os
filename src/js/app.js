@@ -103,6 +103,11 @@ class TermulOS {
       this.openFileInEditor(e.detail);
     });
 
+    // Listen for "open in viewer" events from plugins (e.g. file-transfer)
+    document.addEventListener('termul:open-in-viewer', (e) => {
+      this.openFileInViewer(e.detail);
+    });
+
     // Listen for "open docker shell" events from Docker plugin
     document.addEventListener('termul:docker-open-shell', (e) => {
       this.openDockerShell(e.detail);
@@ -593,7 +598,7 @@ class TermulOS {
   async enterDesktop(profile) {
     // If first connection, build the full desktop shell
     if (this.state !== 'desktop') {
-      await this.enterDesktopShell();
+      await this.enterDesktopShell(profile);
     }
 
     // Create tab for this connection
@@ -603,9 +608,11 @@ class TermulOS {
   /**
    * Build the desktop shell (called once on first connection).
    * Subsequent connections just add tabs without rebuilding.
+   * @param {Object} profile - The connection profile
    */
-  async enterDesktopShell() {
+  async enterDesktopShell(profile) {
     this.state = 'desktop';
+    this.currentProfile = profile;
     const app = document.getElementById('app');
     app.classList.remove('dialog-mode');
     app.classList.add('desktop-mode');
@@ -660,13 +667,17 @@ class TermulOS {
     });
 
     // Initialize components
-    window.Desktop.init();
+    await window.Desktop.init(profile ? profile.id : null);
     window.Desktop.setPlugins(this.plugins);
     window.Desktop.onAppLaunch = (plugin) => this.launchApp(plugin);
+    window.Desktop.onPinToTaskbar = async (plugin) => {
+      await window.Taskbar.pinApp(plugin.dirName);
+      this.updateTaskbar();
+    };
 
     window.WindowManager.init(document.getElementById('os-window-area'));
 
-    window.Taskbar.init();
+    await window.Taskbar.init(profile ? profile.id : null);
     window.Taskbar.onStartClick = () => window.StartMenu.toggle();
     window.Taskbar.onAppClick = (windowId) => {
       const win = window.WindowManager.windows.get(windowId);
@@ -676,6 +687,15 @@ class TermulOS {
         }
         window.WindowManager.focus(windowId);
       }
+    };
+    window.Taskbar.onLaunchApp = (dirName) => {
+      const plugin = this.plugins.find(p => p.dirName === dirName);
+      if (plugin) {
+        this.launchApp(plugin);
+      }
+    };
+    window.Taskbar.onRefreshTaskbar = () => {
+      this.updateTaskbar();
     };
     window.Taskbar.onReconnectClick = () => {
       if (this.activeTabId) {
@@ -713,8 +733,8 @@ class TermulOS {
       window.DashboardWidgets.init();
     }
 
-    // Start taskbar update loop
-    this.taskbarLoop = setInterval(() => this.updateTaskbar(), 500);
+    // Initial taskbar render
+    this.updateTaskbar();
   }
 
   /**
@@ -838,6 +858,61 @@ class TermulOS {
   }
 
   /**
+   * Open a file in the file-viewer plugin (images and PDFs).
+   * Mirrors openFileInEditor but targets file-viewer instead.
+   * @param {Object} detail - { source: 'local'|'remote', path: string, name: string }
+   */
+  openFileInViewer(detail) {
+    if (!detail || !detail.path) return;
+
+    // Find the file-viewer plugin manifest
+    const viewerPlugin = this.plugins.find(p => p.dirName === 'file-viewer');
+    if (!viewerPlugin) {
+      console.warn('[TermulOS] file-viewer plugin not found');
+      return;
+    }
+
+    // Check if a file-viewer window is already open for this tab
+    let existingWindowId = null;
+    for (const [windowId, win] of window.WindowManager.windows) {
+      if (win.plugin.dirName === 'file-viewer' && win.tabId === window.WindowManager.currentTabId) {
+        existingWindowId = windowId;
+        break;
+      }
+    }
+
+    if (existingWindowId) {
+      // Focus existing viewer window and tell it to open the file
+      setTimeout(() => {
+        window.WindowManager.focus(existingWindowId);
+      }, 0);
+      setTimeout(() => {
+        document.dispatchEvent(new CustomEvent('termul:viewer-open-file', { detail: detail }));
+      }, 100);
+    } else {
+      // Open a new file-viewer window
+      const windowId = window.WindowManager.open(viewerPlugin);
+      setTimeout(() => {
+        window.WindowManager.focus(windowId);
+      }, 0);
+      // Wait for plugin to mount, then dispatch the open-file event
+      const waitForMount = () => {
+        const instance = window.PluginLoader.instances.get(windowId);
+        if (instance && instance._lifecycle && instance._lifecycle.onMount) {
+          // Plugin has mounted — give it a bit more time to init
+          setTimeout(() => {
+            document.dispatchEvent(new CustomEvent('termul:viewer-open-file', { detail: detail }));
+          }, 300);
+        } else {
+          // Not yet mounted, retry
+          setTimeout(waitForMount, 100);
+        }
+      };
+      setTimeout(waitForMount, 100);
+    }
+  }
+
+  /**
    * Open a terminal window and run a docker exec command (from Docker plugin).
    * @param {Object} detail - { containerId: string, containerName: string, command: string }
    */
@@ -920,7 +995,7 @@ class TermulOS {
    * Switch to a specific tab.
    * @param {string} tabId
    */
-  switchTab(tabId) {
+  async switchTab(tabId) {
     const tab = this.tabs.find(t => t.id === tabId);
     if (!tab) return;
 
@@ -950,6 +1025,14 @@ class TermulOS {
 
     // Apply this profile's desktop background
     this.applyProfileBackground(tab.profile);
+
+    // Reload desktop and taskbar settings for this profile
+    if (window.Desktop && tab.profile && tab.profile.id) {
+      await window.Desktop.reloadSettings(tab.profile.id);
+    }
+    if (window.Taskbar && tab.profile && tab.profile.id) {
+      await window.Taskbar.reloadSettings(tab.profile.id);
+    }
 
     // Notify dashboard widgets of tab switch so they can follow the active connection
     document.dispatchEvent(new CustomEvent('termul:tab-switched', {
@@ -999,7 +1082,7 @@ class TermulOS {
     // If we closed the active tab, switch to the last tab
     if (this.activeTabId === tabId) {
       const newActiveTab = this.tabs[this.tabs.length - 1];
-      this.switchTab(newActiveTab.id);
+      await this.switchTab(newActiveTab.id);
     }
 
     this.renderTabs();
@@ -1044,9 +1127,9 @@ class TermulOS {
       tabEl.innerHTML = colorDot + name + closeBtn;
 
       // Click tab to switch
-      tabEl.addEventListener('click', (e) => {
+      tabEl.addEventListener('click', async (e) => {
         if (e.target.closest('.titlebar-tab-close')) return;
-        this.switchTab(tab.id);
+        await this.switchTab(tab.id);
         // If this tab is disconnected, show the dialog
         if (tab.status === 'disconnected') {
           this.showDisconnectDialog(tab, 'Connection to server was lost');
@@ -1277,10 +1360,6 @@ class TermulOS {
    * Disconnect all tabs and return to connection dialog.
    */
   async disconnectAllAndReturnToDialog() {
-    if (this.taskbarLoop) {
-      clearInterval(this.taskbarLoop);
-    }
-
     // Close all windows (all tabs)
     window.WindowManager.closeAll();
 
@@ -1502,7 +1581,7 @@ class TermulOS {
    */
   updateTaskbar() {
     const items = window.WindowManager.getTaskbarItems();
-    window.Taskbar.updateItems(items);
+    window.Taskbar.updateItems(items, this.plugins);
     // Update connection status in tray
     window.Taskbar.updateConnectionStatus(this.getActiveTabConnectionStatus());
     // Update tunnel indicator in tray

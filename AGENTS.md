@@ -34,84 +34,220 @@ api.ui.dataTable({ columns: [...], data: [...] })
 
 ---
 
-## Table of Contents
+## 2. Settings & Profile-Specific Persistence
 
-1. [Plugin Architecture](#1-plugin-architecture)
-2. [Quick Start Guide](#2-quick-start-guide)
-3. [Reusable Components](#3-reusable-components-termului)
-4. [Store Mechanism](#4-store-mechanism)
+### Overview
+
+TermulOS supports multiple connection profiles (SSH connections), and many settings should be **profile-specific** rather than global. This ensures each connection can have its own customized configuration.
+
+### Settings Pattern
+
+All profile-specific settings use the pattern:
+
+```javascript
+const key = 'settingName:' + profile.id;
+await window.termulAPI.settings.get(key, defaultValue);
+await window.termulAPI.settings.set(key, value);
+```
+
+### Existing Profile-Specific Settings
+
+| Setting | Key Pattern | Purpose |
+|---------|-------------|---------|
+| Desktop Background | `desktopBackground:${profile.id}` | Custom wallpaper image path per profile |
+| Hidden Desktop Icons | `desktop:hiddenIcons:${profile.id}` | Array of plugin dirNames hidden from desktop |
+| Pinned Taskbar Apps | `taskbar:pinnedApps:${profile.id}` | Array of plugin dirNames pinned to taskbar |
+
+### Implementation Example
+
+Here's how desktop background settings work (from `app.js`):
+
+```javascript
+async applyProfileBackground(profile) {
+  const app = document.getElementById('app');
+  if (!app || !profile || !profile.id) return;
+
+  try {
+    // Build profile-specific key
+    const key = 'desktopBackground:' + profile.id;
+    const savedBg = await window.termulAPI.settings.get(key, null);
+
+    if (savedBg) {
+      // Apply saved background
+      const normalizedPath = savedBg.replace(/\\/g, '/');
+      app.style.backgroundImage = "url('localfile://bg#" + encodeURIComponent(normalizedPath) + "')";
+      app.style.backgroundSize = 'cover';
+      app.style.backgroundPosition = 'center';
+    } else {
+      // No custom background for this profile — restore default
+      app.style.backgroundImage = '';
+    }
+  } catch (e) {
+    console.warn('[TermulOS] Failed to load desktop background:', e);
+  }
+}
+```
+
+### Desktop Icons & Taskbar Pinning Per Profile
+
+Both desktop icon visibility and taskbar pinning are profile-specific:
+
+#### Hidden Desktop Icons
+```javascript
+// From desktop.js
+async loadHiddenIcons() {
+  try {
+    const key = this.currentProfileId
+      ? `desktop:hiddenIcons:${this.currentProfileId}`
+      : 'desktop:hiddenIcons';
+    const saved = await window.termulAPI.settings.get(key, null);
+    if (saved) {
+      const arr = JSON.parse(saved);
+      if (Array.isArray(arr)) {
+        this.hiddenIcons = new Set(arr);
+      }
+    }
+  } catch (e) {
+    console.warn('[Desktop] Failed to load hidden icons:', e);
+  }
+}
+```
+
+#### Pinned Taskbar Apps
+```javascript
+// From taskbar.js
+async loadPinnedApps() {
+  try {
+    const key = this.currentProfileId
+      ? `taskbar:pinnedApps:${this.currentProfileId}`
+      : 'taskbar:pinnedApps';
+    const saved = await window.termulAPI.settings.get(key, null);
+    if (saved) {
+      const arr = JSON.parse(saved);
+      if (Array.isArray(arr)) {
+        this.pinnedApps = arr;
+      }
+    }
+  } catch (e) {
+    console.warn('[Taskbar] Failed to load pinned apps:', e);
+  }
+}
+```
+
+### Reloading Settings on Profile Switch
+
+When switching between connection tabs, profile-specific settings are reloaded:
+
+```javascript
+// From app.js - switchTab method
+async switchTab(tabId) {
+  const tab = this.tabs.find(t => t.id === tabId);
+  if (!tab) return;
+
+  // ... update active tab, show windows, etc ...
+
+  // Apply this profile's desktop background
+  this.applyProfileBackground(tab.profile);
+
+  // Reload desktop and taskbar settings for this profile
+  if (window.Desktop && tab.profile && tab.profile.id) {
+    await window.Desktop.reloadSettings(tab.profile.id);
+  }
+  if (window.Taskbar && tab.profile && tab.profile.id) {
+    await window.Taskbar.reloadSettings(tab.profile.id);
+  }
+}
+```
+
+### Implementing Profile-Specific Settings in Your Code
+
+When creating plugins or features that need per-profile settings:
+
+1. **Accept profile ID during initialization:**
+   ```javascript
+   async init(profileId = null) {
+     this.currentProfileId = profileId;
+     await this.loadSettings();
+   }
+   ```
+
+2. **Use profile-specific keys:**
+   ```javascript
+   async loadSettings() {
+     const key = this.currentProfileId
+       ? `myFeature:settings:${this.currentProfileId}`
+       : 'myFeature:settings';
+     const saved = await window.termulAPI.settings.get(key, null);
+     // ... parse and apply settings
+   }
+   ```
+
+3. **Save with profile-specific keys:**
+   ```javascript
+   async saveSettings() {
+     const key = this.currentProfileId
+       ? `myFeature:settings:${this.currentProfileId}`
+       : 'myFeature:settings';
+     await window.termulAPI.settings.set(key, JSON.stringify(this.settings));
+   }
+   ```
+
+4. **Provide reload method for profile switching:**
+   ```javascript
+   async reloadSettings(profileId) {
+     this.currentProfileId = profileId;
+     await this.loadSettings();
+     this.render(); // Re-render UI with new settings
+   }
+   ```
+
+### Accessing Current Profile from Plugins
+
+Plugins can access the current profile through the `PLUGIN_API`:
+
+```javascript
+PLUGIN_LIFECYCLE.onMount(function() {
+  const api = PLUGIN_API;
+
+  // Check if connected to a profile
+  if (api.connectionId && api.profile) {
+    console.log('Connected to:', api.profile.host);
+    console.log('Profile ID:', api.profile.id);
+
+    // Use profile.id for profile-specific settings
+    const key = 'myPlugin:data:' + api.profile.id;
+    const data = await window.termulAPI.settings.get(key, null);
+  }
+});
+```
+
+### Backward Compatibility
+
+When no profile ID is provided (e.g., in connection dialog mode), the code falls back to global keys without the profile suffix:
+
+```javascript
+const key = this.currentProfileId
+  ? `setting:${this.currentProfileId}`  // Profile-specific
+  : 'setting';                           // Global fallback
+```
+
+This ensures the feature works in both scenarios.
+
+### Best Practices
+
+✅ **Do:**
+- Always use `profile.id` for settings that vary per connection
+- Provide fallback to global keys when `profileId` is null
+- Implement `reloadSettings()` for live profile switching
+- Clear/reset settings when switching to a profile with no saved data
+
+❌ **Don't:**
+- Use global settings for connection-specific data
+- Forget to handle the case where `profileId` is null
+- Store sensitive data (passwords, keys) in settings - use secure storage instead
 
 ---
 
-## 1. Plugin Architecture
-
-### Overview
-TermulOS uses a plugin-based architecture where each application window runs a separate plugin instance with complete isolation using **Shadow DOM** and **sandboxed execution contexts**.
-
-### Key Design Principles
-- **Isolation**: Each plugin runs in its own Shadow DOM
-- **Sandboxing**: Controlled environment with tracked resources
-- **Lifecycle Management**: Well-defined hooks for initialization and cleanup
-- **No Framework Dependencies**: Vanilla JavaScript with optional UI component library
-- **Auto-Cleanup**: All timers, listeners, and components are automatically cleaned up
-
-### Core Components
-
-#### 1. PluginLoader (Singleton)
-**Location**: `src/js/plugin-loader.js`
-
-Central orchestrator for all plugin operations:
-- Load and validate plugin manifests
-- Install/uninstall plugins
-- Batch-load plugin files
-- Create scoped PluginAPI instances
-- Track running plugin instances
-- Clean up instance resources
-
-#### 2. PluginInstance
-**Location**: `src/js/plugin-loader.js` (lines 793-998)
-
-Represents a single running plugin instance with:
-- Shadow DOM management
-- Sandbox execution
-- Resource tracking (timers, listeners, components)
-- Lifecycle hook firing
-- Cleanup on unmount
-
-#### 3. WindowManager
-**Location**: `src/js/window-manager.js`
-
-Manages application windows and integrates with PluginInstance:
-- Create and position windows
-- Mount plugins into windows
-- Handle window focus/minimize/maximize/close
-- Clean up plugins when windows close
-
-### Plugin Structure
-```
-src/plugins/[plugin-name]/
-├── manifest.json       # Plugin metadata
-├── index.html          # Plugin HTML structure
-├── styles.css          # Plugin-specific styles (optional)
-└── main.js            # Plugin logic
-```
-
-### Manifest Schema
-```json
-{
-  "name": "Plugin Name",           // Required: Display name
-  "description": "Description",    // Optional: Short description
-  "version": "1.0.0",             // Required: Semver version
-  "author": "Author",              // Optional: Author name
-  "dirName": "plugin-name",        // Required: Directory name
-  "system": false,                 // Optional: Mark as system plugin
-  "window": {                      // Optional: Default window size
-    "width": 800,
-    "height": 550
-  },
-  "permissions": [],               // Optional: Required permissions
-  "icon": "<svg>...</svg>"         // Optional: SVG icon markup
-}
 ```
 
 ### Lifecycle Hooks
@@ -171,7 +307,7 @@ PLUGIN_LIFECYCLE.onBlur(function() {
 
 ---
 
-## 2. Quick Start Guide
+## 3. Quick Start Guide
 
 ### Create Your First Plugin in 5 Minutes
 
@@ -343,7 +479,7 @@ const btn = api.ui.button({
 
 ---
 
-## 3. Reusable Components (TermulUI)
+## 4. Reusable Components (TermulUI)
 
 ### 🎨 Why TermulUI Components Are Mandatory
 
@@ -563,7 +699,7 @@ var(--tui-shadow-md)
 
 ---
 
-## 4. Store Mechanism
+## 5. Store Mechanism
 
 ### Overview
 The Plugin Store is a built-in system plugin that lets users browse and install plugins from a GitHub repository. It fetches a store index from a configurable raw GitHub URL and installs plugins through the existing `PluginLoader.install()` pipeline.

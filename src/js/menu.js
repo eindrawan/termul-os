@@ -64,8 +64,12 @@ class StartMenu {
   }
 
   render() {
-    const pinnedApps = this.plugins.filter(p => !p.system);
-    const systemApps = this.plugins.filter(p => p.system);
+    // Sort plugins: system apps first, then non-system apps alphabetically
+    const sortedPlugins = [...this.plugins].sort((a, b) => {
+      if (a.system && !b.system) return -1;
+      if (!a.system && b.system) return 1;
+      return a.name.localeCompare(b.name);
+    });
 
     this.element.innerHTML = `
       <div class="start-menu-header">
@@ -77,23 +81,10 @@ class StartMenu {
         </div>
       </div>
       <div class="start-menu-section">
-        <div class="start-menu-section-title">
-          <span>Pinned</span>
-        </div>
-        <div class="start-menu-grid" id="start-menu-pinned">
-          ${pinnedApps.map(plugin => this.renderAppTile(plugin)).join('')}
+        <div class="start-menu-grid" id="start-menu-all-apps">
+          ${sortedPlugins.map(plugin => this.renderAppTile(plugin)).join('')}
         </div>
       </div>
-      ${systemApps.length > 0 ? `
-      <div class="start-menu-section">
-        <div class="start-menu-section-title">
-          <span>System</span>
-        </div>
-        <div class="start-menu-grid" id="start-menu-system">
-          ${systemApps.map(plugin => this.renderAppTile(plugin)).join('')}
-        </div>
-      </div>
-      ` : ''}
       <div class="start-menu-footer">
         <div class="start-menu-user">
           <div class="start-menu-user-avatar">

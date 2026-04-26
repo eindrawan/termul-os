@@ -1,0 +1,13 @@
+{
+  "name": "File Viewer",
+  "description": "View images and PDF documents — supports local and remote files with zoom controls",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "file-viewer",
+  "system": true,
+  "window": {
+    "width": 900,
+    "height": 650
+  },
+  "permissions": ["ssh"]
+}

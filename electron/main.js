@@ -1248,6 +1248,41 @@ ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
 });
 
 /**
+ * Read a remote file's binary content via SFTP and return as base64.
+ * Used by file-viewer to display images and PDFs.
+ * Returns { success, content } or { success: false, error }
+ */
+ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) return { success: false, error: 'No active connection' };
+
+  return new Promise((resolve) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        resolve({ success: false, error: err.message });
+        return;
+      }
+
+      const chunks = [];
+      const readStream = sftp.createReadStream(remotePath);
+
+      readStream.on('data', (chunk) => {
+        chunks.push(chunk);
+      });
+
+      readStream.on('error', (readErr) => {
+        resolve({ success: false, error: readErr.message });
+      });
+
+      readStream.on('close', () => {
+        const content = Buffer.concat(chunks).toString('base64');
+        resolve({ success: true, content: content });
+      });
+    });
+  });
+});
+
+/**
  * Write text content to a remote file via SFTP.
  * Returns { success: true } or { success: false, error }
  */

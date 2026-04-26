@@ -1,0 +1,362 @@
+/* ─── File Viewer Plugin Styles ─────────────────────────────────────── */
+
+.viewer-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: #1e1e1e;
+  color: #cccccc;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 13px;
+}
+
+/* ─── Toolbar Overrides ─────────────────────────────────────────────── */
+
+.viewer-container > .tui-toolbar {
+  background: #2d2d2d;
+  border-bottom: 1px solid #3c3c3c;
+}
+
+.fv-toolbar-separator {
+  width: 1px;
+  height: 16px;
+  background: #555;
+  margin: 0 4px;
+}
+
+.fv-zoom-label {
+  font-size: 11px;
+  color: #aaa;
+  min-width: 36px;
+  text-align: center;
+  user-select: none;
+}
+
+/* ─── Tabs ───────────────────────────────────────────────────────────── */
+
+.fv-tabs {
+  display: flex;
+  background: #252526;
+  border-bottom: 1px solid #3c3c3c;
+  min-height: 35px;
+  overflow: hidden;
+}
+
+.fv-tabs-scroll {
+  display: flex;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scrollbar-width: none;
+}
+
+.fv-tabs-scroll::-webkit-scrollbar {
+  display: none;
+}
+
+.fv-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 12px;
+  height: 35px;
+  min-width: 0;
+  max-width: 180px;
+  background: #2d2d2d;
+  border-right: 1px solid #3c3c3c;
+  color: #969696;
+  cursor: pointer;
+  font-size: 12px;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.1s;
+}
+
+.fv-tab:hover {
+  background: #333;
+}
+
+.fv-tab.active {
+  background: #1e1e1e;
+  color: #fff;
+  border-bottom: 2px solid #0078d4;
+}
+
+.fv-tab-pdf .fv-tab-name::before {
+  content: '';
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  background: #e74c3c;
+  border-radius: 2px;
+  margin-right: 4px;
+  vertical-align: middle;
+}
+
+.fv-tab-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.fv-tab-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fv-tab-icon.local svg {
+  color: #6db96d;
+}
+
+.fv-tab-icon.remote svg {
+  color: #60cdff;
+}
+
+.fv-tab-close {
+  width: 18px;
+  height: 18px;
+  border: none;
+  background: none;
+  color: #969696;
+  cursor: pointer;
+  border-radius: 3px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.fv-tab:hover .fv-tab-close,
+.fv-tab.active .fv-tab-close {
+  opacity: 1;
+}
+
+.fv-tab-close:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: #fff;
+}
+
+/* ─── Viewer Area ────────────────────────────────────────────────────── */
+
+.fv-viewer-wrapper {
+  flex: 1;
+  position: relative;
+  overflow: hidden;
+}
+
+.fv-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+  background: #1a1a1a;
+  background-image:
+    linear-gradient(45deg, #222 25%, transparent 25%),
+    linear-gradient(-45deg, #222 25%, transparent 25%),
+    linear-gradient(45deg, transparent 75%, #222 75%),
+    linear-gradient(-45deg, transparent 75%, #222 75%);
+  background-size: 20px 20px;
+  background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+}
+
+/* ─── Image Viewer ───────────────────────────────────────────────────── */
+
+.fv-image-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px;
+  box-sizing: border-box;
+}
+
+.fv-image {
+  object-fit: contain;
+  max-width: 100%;
+  max-height: 100%;
+  border-radius: 4px;
+  user-select: none;
+  -webkit-user-drag: none;
+  transition: width 0.15s ease;
+}
+
+/* ─── PDF Viewer ─────────────────────────────────────────────────────── */
+
+.fv-pdf-iframe {
+  width: 100%;
+  height: 100%;
+  border: none;
+  background: #525659;
+}
+
+/* ─── Empty State ────────────────────────────────────────────────────── */
+
+.fv-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #6e6e6e;
+  gap: 12px;
+}
+
+.fv-empty-icon {
+  opacity: 0.4;
+}
+
+.fv-empty-text {
+  font-size: 14px;
+  margin: 0;
+}
+
+.fv-empty-shortcuts {
+  display: flex;
+  gap: 10px;
+  margin-top: 8px;
+}
+
+.fv-empty-formats {
+  font-size: 11px;
+  color: #555;
+  margin: 4px 0 0 0;
+}
+
+/* ─── Status Bar ─────────────────────────────────────────────────────── */
+
+.fv-statusbar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 0 10px;
+  height: 24px;
+  background: #007acc;
+  color: #fff;
+  font-size: 12px;
+  line-height: 24px;
+  flex-shrink: 0;
+}
+
+.fv-statusbar-left,
+.fv-statusbar-right {
+  display: flex;
+  align-items: center;
+  gap: 0;
+}
+
+.fv-status-item {
+  padding: 0 6px;
+  white-space: nowrap;
+}
+
+.fv-status-sep {
+  opacity: 0.5;
+  font-size: 10px;
+}
+
+/* ─── Modal ──────────────────────────────────────────────────────────── */
+
+.fv-modal-backdrop {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 100;
+  opacity: 0;
+  visibility: hidden;
+  transition: opacity 0.15s, visibility 0.15s;
+}
+
+.fv-modal-backdrop.open {
+  opacity: 1;
+  visibility: visible;
+}
+
+.fv-modal {
+  background: #2d2d2d;
+  border: 1px solid #3c3c3c;
+  border-radius: 8px;
+  width: 440px;
+  max-width: 90%;
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.5);
+}
+
+.fv-modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px 10px;
+}
+
+.fv-modal-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: #e0e0e0;
+}
+
+.fv-modal-body {
+  padding: 6px 18px 14px;
+}
+
+.fv-modal-label {
+  display: block;
+  font-size: 12px;
+  color: #aaa;
+  margin-bottom: 6px;
+}
+
+.fv-modal-input {
+  width: 100%;
+  box-sizing: border-box;
+  background: #1e1e1e;
+  color: #ccc;
+  border: 1px solid #555;
+  border-radius: 4px;
+  padding: 8px 10px;
+  font-size: 13px;
+  font-family: 'Cascadia Code', 'Fira Code', monospace;
+}
+
+.fv-modal-input:focus {
+  outline: none;
+  border-color: #0078d4;
+}
+
+.fv-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 10px 18px 14px;
+}
+
+/* ─── Loading ────────────────────────────────────────────────────────── */
+
+.fv-loading {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  color: #969696;
+  gap: 12px;
+}
+
+.fv-loading-text {
+  font-size: 13px;
+}

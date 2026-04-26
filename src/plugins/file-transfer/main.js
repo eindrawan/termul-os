@@ -31,6 +31,14 @@
   var isTransferring = false;
   var activePane = 'local';  // 'local' or 'remote' - last focused pane
 
+  // Breadcrumb mode state
+  var localPathMode = 'breadcrumb';  // 'breadcrumb' or 'input'
+  var remotePathMode = 'breadcrumb';
+  var localBcClickTimer = null;
+  var remoteBcClickTimer = null;
+  var localBlurTimer = null;
+  var remoteBlurTimer = null;
+
   // Sort state per pane: { key: 'name'|'size'|'date', dir: 'asc'|'desc' }
   var localSort = { key: 'name', dir: 'asc' };
   var remoteSort = { key: 'name', dir: 'asc' };
@@ -124,6 +132,25 @@
     return false;
   }
 
+  // ─── Viewable File Detection (images & PDFs) ────────────────────────
+
+  var VIEWABLE_EXTENSIONS = {
+    'png': true, 'jpg': true, 'jpeg': true, 'gif': true, 'bmp': true,
+    'svg': true, 'webp': true, 'ico': true, 'tiff': true, 'tif': true,
+    'avif': true, 'pdf': true,
+  };
+
+  function isViewableFile(entry) {
+    if (!entry || !entry.isFile) return false;
+    var name = entry.name || '';
+    var dotIdx = name.lastIndexOf('.');
+    if (dotIdx >= 0) {
+      var ext = name.substring(dotIdx + 1).toLowerCase();
+      if (VIEWABLE_EXTENSIONS[ext]) return true;
+    }
+    return false;
+  }
+
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
   PLUGIN_LIFECYCLE.onMount(function () {
@@ -132,6 +159,8 @@
     els.remotePane = shadow.getElementById('ft-remote-pane');
     els.localPath = shadow.getElementById('ft-local-path');
     els.remotePath = shadow.getElementById('ft-remote-path');
+    els.localBreadcrumb = shadow.getElementById('ft-local-breadcrumb');
+    els.remoteBreadcrumb = shadow.getElementById('ft-remote-breadcrumb');
     els.localBody = shadow.getElementById('ft-local-body');
     els.remoteBody = shadow.getElementById('ft-remote-body');
     els.localStatus = shadow.getElementById('ft-local-status');
@@ -170,8 +199,8 @@
     els.ctxDelete = shadow.getElementById('ft-ctx-delete');
 
     // Bind events
-    addEventListener(els.localGo, 'click', function () { navigateLocal(els.localPath.value.trim()); });
-    addEventListener(els.remoteGo, 'click', function () { navigateRemote(els.remotePath.value.trim()); });
+    addEventListener(els.localGo, 'click', function () { clearTimeout(localBlurTimer); navigateLocal(els.localPath.value.trim()); });
+    addEventListener(els.remoteGo, 'click', function () { clearTimeout(remoteBlurTimer); navigateRemote(els.remotePath.value.trim()); });
     addEventListener(els.localUp, 'click', goUpLocal);
     addEventListener(els.remoteUp, 'click', goUpRemote);
     addEventListener(els.localHome, 'click', goHomeLocal);
@@ -184,12 +213,66 @@
     addEventListener(els.deleteBtn, 'click', deleteSelected);
     addEventListener(els.queueToggle, 'click', toggleQueue);
 
-    // Enter key on path inputs
+    // Enter / Escape key on path inputs
     addEventListener(els.localPath, 'keydown', function (e) {
-      if (e.key === 'Enter') navigateLocal(els.localPath.value.trim());
+      if (e.key === 'Enter') {
+        clearTimeout(localBlurTimer);
+        navigateLocal(els.localPath.value.trim());
+      } else if (e.key === 'Escape') {
+        clearTimeout(localBlurTimer);
+        switchToBreadcrumb('local');
+      }
     });
     addEventListener(els.remotePath, 'keydown', function (e) {
-      if (e.key === 'Enter') navigateRemote(els.remotePath.value.trim());
+      if (e.key === 'Enter') {
+        clearTimeout(remoteBlurTimer);
+        navigateRemote(els.remotePath.value.trim());
+      } else if (e.key === 'Escape') {
+        clearTimeout(remoteBlurTimer);
+        switchToBreadcrumb('remote');
+      }
+    });
+
+    // Blur on path inputs — switch back to breadcrumb after short delay
+    addEventListener(els.localPath, 'blur', function () {
+      localBlurTimer = setTimeout(function () { switchToBreadcrumb('local'); }, 150);
+    });
+    addEventListener(els.remotePath, 'blur', function () {
+      remoteBlurTimer = setTimeout(function () { switchToBreadcrumb('remote'); }, 150);
+    });
+
+    // Prevent Go button mousedown from stealing focus in input mode
+    addEventListener(els.localGo, 'mousedown', function (e) {
+      if (localPathMode === 'input') e.preventDefault();
+    });
+    addEventListener(els.remoteGo, 'mousedown', function (e) {
+      if (remotePathMode === 'input') e.preventDefault();
+    });
+
+    // Breadcrumb single-click — navigate to segment (delayed for dblclick detection)
+    addEventListener(els.localBreadcrumb, 'click', function (e) {
+      var target = e.target.closest('.ft-bc-segment');
+      if (!target || target.classList.contains('ft-bc-current')) return;
+      var path = target.getAttribute('data-path');
+      clearTimeout(localBcClickTimer);
+      localBcClickTimer = setTimeout(function () { loadLocalDir(path); }, 250);
+    });
+    addEventListener(els.remoteBreadcrumb, 'click', function (e) {
+      var target = e.target.closest('.ft-bc-segment');
+      if (!target || target.classList.contains('ft-bc-current')) return;
+      var path = target.getAttribute('data-path');
+      clearTimeout(remoteBcClickTimer);
+      remoteBcClickTimer = setTimeout(function () { loadRemoteDir(path); }, 250);
+    });
+
+    // Breadcrumb double-click — switch to editable input mode
+    addEventListener(els.localBreadcrumb, 'dblclick', function () {
+      clearTimeout(localBcClickTimer);
+      switchToInput('local');
+    });
+    addEventListener(els.remoteBreadcrumb, 'dblclick', function () {
+      clearTimeout(remoteBcClickTimer);
+      switchToInput('remote');
     });
 
     // Bind sortable column header clicks
@@ -431,23 +514,23 @@
     var selection = ctxPane === 'local' ? selectedLocal : selectedRemote;
     var entries = ctxPane === 'local' ? localEntries : remoteEntries;
     var hasSelection = Object.keys(selection).length > 0;
-    var hasLocalFiles = hasSelection && ctxPane === 'local' && getSelectedLocalFiles().length > 0;
-    var hasRemoteFiles = hasSelection && ctxPane === 'remote' && getSelectedRemoteFiles().length > 0;
+    var hasLocalItems = hasSelection && ctxPane === 'local';
+    var hasRemoteItems = hasSelection && ctxPane === 'remote';
 
-    // "Open" — only show when exactly one text file is selected
+    // "Open" — show when exactly one text file or viewable file is selected
     var canOpen = false;
     var selectedNames = Object.keys(selection);
     if (selectedNames.length === 1) {
       var entry = findEntryByName(entries, selectedNames[0]);
-      if (entry && isTextFile(entry)) {
+      if (entry && (isTextFile(entry) || isViewableFile(entry))) {
         canOpen = true;
       }
     }
     els.ctxOpen.disabled = !canOpen;
     els.ctxOpen.style.display = '';
 
-    els.ctxUpload.disabled = !hasLocalFiles;
-    els.ctxDownload.disabled = !hasRemoteFiles;
+    els.ctxUpload.disabled = !hasLocalItems;
+    els.ctxDownload.disabled = !hasRemoteItems;
     els.ctxDelete.disabled = !hasSelection;
 
     // Show/hide transfer items based on pane
@@ -504,6 +587,7 @@
   }
 
   async function loadLocalDir(dirPath) {
+    clearTimeout(localBcClickTimer);
     setLocalStatus('Loading...');
     els.localBody.innerHTML = '<div class="ft-loading"><div class="tui-spinner"></div><span>Loading...</span></div>';
 
@@ -516,6 +600,8 @@
       localPath = result.path;
       localEntries = result.entries;
       els.localPath.value = localPath;
+      renderPathBreadcrumb(els.localBreadcrumb, localPath, 'local');
+      switchToBreadcrumb('local');
       renderLocalList();
       var fileCount = localEntries.filter(function (e) { return e.isFile; }).length;
       var dirCount = localEntries.filter(function (e) { return e.isDirectory; }).length;
@@ -604,6 +690,12 @@
     if (!entry) return;
     if (entry.isDirectory) {
       loadLocalDir(entry.path);
+    } else if (isViewableFile(entry)) {
+      // Open images/PDFs in the viewer
+      ctxPane = 'local';
+      clearLocalSelection();
+      toggleLocalSelection(name, row);
+      openSelectedFile();
     } else if (isTextFile(entry)) {
       // Open text files in the editor
       ctxPane = 'local';
@@ -706,6 +798,7 @@
   }
 
   async function loadRemoteDir(dirPath) {
+    clearTimeout(remoteBcClickTimer);
     if (!api.connectionId) {
       showRemoteError('Not connected');
       return;
@@ -727,6 +820,8 @@
       remotePath = dirPath;
       remoteEntries = result.entries;
       els.remotePath.value = remotePath;
+      renderPathBreadcrumb(els.remoteBreadcrumb, remotePath, 'remote');
+      switchToBreadcrumb('remote');
       renderRemoteList();
       var fileCount = remoteEntries.filter(function (e) { return e.isFile; }).length;
       var dirCount = remoteEntries.filter(function (e) { return e.isDirectory; }).length;
@@ -814,6 +909,12 @@
     if (!entry) return;
     if (entry.isDirectory) {
       loadRemoteDir(entry.path);
+    } else if (isViewableFile(entry)) {
+      // Open images/PDFs in the viewer
+      ctxPane = 'remote';
+      clearRemoteSelection();
+      toggleRemoteSelection(name, row);
+      openSelectedFile();
     } else if (isTextFile(entry)) {
       // Open text files in the editor
       ctxPane = 'remote';
@@ -903,11 +1004,9 @@
   function updateTransferButtons() {
     var hasLocalSelection = Object.keys(selectedLocal).length > 0;
     var hasRemoteSelection = Object.keys(selectedRemote).length > 0;
-    // Only enable if we have file selections (not dirs)
-    var hasLocalFiles = hasLocalSelection && getSelectedLocalFiles().length > 0;
-    var hasRemoteFiles = hasRemoteSelection && getSelectedRemoteFiles().length > 0;
-    els.uploadBtn.disabled = !hasLocalFiles;
-    els.downloadBtn.disabled = !hasRemoteFiles;
+    // Enable for any selection (files and/or folders)
+    els.uploadBtn.disabled = !hasLocalSelection;
+    els.downloadBtn.disabled = !hasRemoteSelection;
   }
 
   function getSelectedLocalFiles() {
@@ -946,41 +1045,237 @@
     return items;
   }
 
-  function uploadSelected() {
-    var files = getSelectedLocalFiles();
-    if (files.length === 0) return;
+  // ─── Recursive Folder Collection ──────────────────────────────────────
+
+  /**
+   * Recursively collect all files from a local directory tree.
+   * Returns array of { name, path, relativePath, size }.
+   */
+  async function collectLocalFilesRecursively(dirPath, baseRelative) {
+    var files = [];
+    try {
+      var result = await window.termulAPI.fs.listDir(dirPath);
+      if (!result.success) return files;
+      for (var i = 0; i < result.entries.length; i++) {
+        var entry = result.entries[i];
+        var rel = baseRelative ? baseRelative + '/' + entry.name : entry.name;
+        if (entry.isDirectory) {
+          var sub = await collectLocalFilesRecursively(entry.path, rel);
+          files = files.concat(sub);
+        } else if (entry.isFile) {
+          files.push({ name: entry.name, path: entry.path, relativePath: rel, size: entry.size });
+        }
+      }
+    } catch (e) { /* skip unreadable dirs */ }
+    return files;
+  }
+
+  /**
+   * Recursively collect all sub-directory relative paths from a local directory tree.
+   * Returns array of relative paths in parent-first order.
+   */
+  async function collectLocalDirsRecursively(dirPath, baseRelative) {
+    var dirs = [];
+    try {
+      var result = await window.termulAPI.fs.listDir(dirPath);
+      if (!result.success) return dirs;
+      for (var i = 0; i < result.entries.length; i++) {
+        var entry = result.entries[i];
+        if (entry.isDirectory) {
+          var rel = baseRelative ? baseRelative + '/' + entry.name : entry.name;
+          dirs.push(rel);
+          var sub = await collectLocalDirsRecursively(entry.path, rel);
+          dirs = dirs.concat(sub);
+        }
+      }
+    } catch (e) { /* skip unreadable dirs */ }
+    return dirs;
+  }
+
+  /**
+   * Recursively collect all files from a remote directory tree.
+   * Returns array of { name, path, relativePath, size }.
+   */
+  async function collectRemoteFilesRecursively(dirPath, baseRelative) {
+    var files = [];
+    try {
+      var result;
+      if (isFtp()) {
+        result = await window.termulAPI.ftp.listDir(api.connectionId, dirPath);
+      } else {
+        result = await window.termulAPI.ssh.sftpListDir(api.connectionId, dirPath);
+      }
+      if (!result.success) return files;
+      for (var i = 0; i < result.entries.length; i++) {
+        var entry = result.entries[i];
+        var rel = baseRelative ? baseRelative + '/' + entry.name : entry.name;
+        if (entry.isDirectory) {
+          var sub = await collectRemoteFilesRecursively(entry.path, rel);
+          files = files.concat(sub);
+        } else if (entry.isFile) {
+          files.push({ name: entry.name, path: entry.path, relativePath: rel, size: entry.size });
+        }
+      }
+    } catch (e) { /* skip unreadable dirs */ }
+    return files;
+  }
+
+  /**
+   * Recursively collect all sub-directory relative paths from a remote directory tree.
+   * Returns array of relative paths in parent-first order.
+   */
+  async function collectRemoteDirsRecursively(dirPath, baseRelative) {
+    var dirs = [];
+    try {
+      var result;
+      if (isFtp()) {
+        result = await window.termulAPI.ftp.listDir(api.connectionId, dirPath);
+      } else {
+        result = await window.termulAPI.ssh.sftpListDir(api.connectionId, dirPath);
+      }
+      if (!result.success) return dirs;
+      for (var i = 0; i < result.entries.length; i++) {
+        var entry = result.entries[i];
+        if (entry.isDirectory) {
+          var rel = baseRelative ? baseRelative + '/' + entry.name : entry.name;
+          dirs.push(rel);
+          var sub = await collectRemoteDirsRecursively(entry.path, rel);
+          dirs = dirs.concat(sub);
+        }
+      }
+    } catch (e) { /* skip unreadable dirs */ }
+    return dirs;
+  }
+
+  /**
+   * Ensure a remote directory exists. Uses mkdir -p via SSH exec or ftp.mkdir.
+   */
+  async function ensureRemoteDir(dirPath) {
+    try {
+      if (isFtp()) {
+        var result = await window.termulAPI.ftp.mkdir(api.connectionId, dirPath);
+        return result;
+      } else {
+        // Use mkdir -p via SSH exec for robustness (handles existing dirs and nested paths)
+        var esc = shellQuote(dirPath);
+        return await window.termulAPI.ssh.exec(api.connectionId, 'mkdir -p ' + esc);
+      }
+    } catch (e) {
+      // Non-fatal — dir may already exist
+      return { success: true };
+    }
+  }
+
+  /**
+   * Ensure a local directory exists. Creates parent dirs by calling in order.
+   */
+  async function ensureLocalDir(dirPath) {
+    try {
+      var result = await window.termulAPI.fs.mkdir(dirPath);
+      return result;
+    } catch (e) {
+      // Non-fatal — dir may already exist
+      return { success: true };
+    }
+  }
+
+  async function uploadSelected() {
+    // Snapshot and clear selection immediately to prevent duplicate processing
+    var names = Object.keys(selectedLocal);
+    if (names.length === 0) return;
     if (!api.connectionId) {
       var toast = api.ui.toast();
       toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
       return;
     }
 
-    for (var i = 0; i < files.length; i++) {
-      var remoteFilePath = joinRemotePath(remotePath, files[i].name);
-      addTransfer('upload', files[i].name, files[i].path, remoteFilePath, files[i].size);
-    }
-
+    var snapshot = names.slice();
     clearLocalSelection();
     updateTransferButtons();
+    setLocalStatus('Preparing upload...');
+
+    for (var i = 0; i < snapshot.length; i++) {
+      var entry = findLocalEntry(snapshot[i]);
+      if (!entry) continue;
+
+      if (entry.isFile) {
+        // Single file upload
+        var remoteFilePath = joinRemotePath(remotePath, entry.name);
+        addTransfer('upload', entry.name, entry.path, remoteFilePath, entry.size);
+      } else if (entry.isDirectory) {
+        // Folder upload — collect all files and dirs recursively
+        var folderDirs = await collectLocalDirsRecursively(entry.path, entry.name);
+        var folderFiles = await collectLocalFilesRecursively(entry.path, entry.name);
+
+        // Create the root remote folder first (before sub-dirs or files)
+        var remoteFolderPath = joinRemotePath(remotePath, entry.name);
+        await ensureRemoteDir(remoteFolderPath);
+
+        // Create remote sub-directories (parent-first order)
+        for (var d = 0; d < folderDirs.length; d++) {
+          var remoteDirPath = joinRemotePath(remotePath, folderDirs[d]);
+          await ensureRemoteDir(remoteDirPath);
+        }
+
+        // Add all files to transfer queue
+        for (var f = 0; f < folderFiles.length; f++) {
+          var remoteFile = joinRemotePath(remotePath, folderFiles[f].relativePath);
+          addTransfer('upload', folderFiles[f].relativePath, folderFiles[f].path, remoteFile, folderFiles[f].size);
+        }
+      }
+    }
+
+    setLocalStatus('');
     processQueue();
   }
 
-  function downloadSelected() {
-    var files = getSelectedRemoteFiles();
-    if (files.length === 0) return;
+  async function downloadSelected() {
+    // Snapshot and clear selection immediately to prevent duplicate processing
+    var names = Object.keys(selectedRemote);
+    if (names.length === 0) return;
     if (!api.connectionId) {
       var toast = api.ui.toast();
       toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
       return;
     }
 
-    for (var i = 0; i < files.length; i++) {
-      var localFilePath = joinLocalPath(localPath, files[i].name);
-      addTransfer('download', files[i].name, files[i].path, localFilePath, files[i].size);
-    }
-
+    var snapshot = names.slice();
     clearRemoteSelection();
     updateTransferButtons();
+    setRemoteStatus('Preparing download...');
+
+    for (var i = 0; i < snapshot.length; i++) {
+      var entry = findRemoteEntry(snapshot[i]);
+      if (!entry) continue;
+
+      if (entry.isFile) {
+        // Single file download
+        var localFilePath = joinLocalPath(localPath, entry.name);
+        addTransfer('download', entry.name, entry.path, localFilePath, entry.size);
+      } else if (entry.isDirectory) {
+        // Folder download — collect all files and dirs recursively
+        var folderDirs = await collectRemoteDirsRecursively(entry.path, entry.name);
+        var folderFiles = await collectRemoteFilesRecursively(entry.path, entry.name);
+
+        // Create the root local folder first (before sub-dirs or files)
+        var localFolderPath = joinLocalPath(localPath, entry.name);
+        await ensureLocalDir(localFolderPath);
+
+        // Create local sub-directories (parent-first order)
+        for (var d = 0; d < folderDirs.length; d++) {
+          var localDirPath = joinLocalPath(localPath, folderDirs[d]);
+          await ensureLocalDir(localDirPath);
+        }
+
+        // Add all files to transfer queue
+        for (var f = 0; f < folderFiles.length; f++) {
+          var localFile = joinLocalPath(localPath, folderFiles[f].relativePath);
+          addTransfer('download', folderFiles[f].relativePath, folderFiles[f].path, localFile, folderFiles[f].size);
+        }
+      }
+    }
+
+    setRemoteStatus('');
     processQueue();
   }
 
@@ -1339,7 +1634,7 @@
     }
   }
 
-  // ─── Open in Editor ────────────────────────────────────────────────
+  // ─── Open in Editor / Viewer ────────────────────────────────────────
 
   function openSelectedFile() {
     var selection = ctxPane === 'local' ? selectedLocal : selectedRemote;
@@ -1348,17 +1643,26 @@
 
     var entries = ctxPane === 'local' ? localEntries : remoteEntries;
     var entry = findEntryByName(entries, names[0]);
-    if (!entry || !isTextFile(entry)) return;
+    if (!entry) return;
 
     var filePath = entry.path;
     var source = ctxPane; // 'local' or 'remote'
 
-    // Emit event for app.js to pick up and open the file-editor plugin
-    api.events.emit('open-in-editor', {
-      source: source,
-      path: filePath,
-      name: entry.name,
-    });
+    if (isViewableFile(entry)) {
+      // Open images and PDFs in the file-viewer plugin
+      api.events.emit('open-in-viewer', {
+        source: source,
+        path: filePath,
+        name: entry.name,
+      });
+    } else if (isTextFile(entry)) {
+      // Open text files in the file-editor plugin
+      api.events.emit('open-in-editor', {
+        source: source,
+        path: filePath,
+        name: entry.name,
+      });
+    }
   }
 
   // ─── Refresh ────────────────────────────────────────────────────────
@@ -1367,6 +1671,107 @@
     loadLocalDir(localPath);
     if (api.connectionId && remotePath) {
       loadRemoteDir(remotePath);
+    }
+  }
+
+  // ─── Breadcrumb Functions ──────────────────────────────────────────────
+
+  /**
+   * Render path breadcrumb segments into a container element.
+   * Handles both Unix paths (/home/user) and Windows paths (C:\Users\name).
+   */
+  function renderPathBreadcrumb(containerEl, path, pane) {
+    if (!containerEl || !path) return;
+
+    var isWindows = /^[A-Za-z]:/.test(path);
+    var segments = []; // { name, fullPath }
+
+    if (isWindows) {
+      // Windows path: C:\Users\name
+      var parts = path.split(/[\\\/]/).filter(function (s) { return s !== ''; });
+      var accumulated = '';
+      for (var i = 0; i < parts.length; i++) {
+        accumulated = (i === 0) ? parts[i] + '\\' : accumulated + '\\' + parts[i];
+        segments.push({ name: parts[i], fullPath: accumulated });
+      }
+    } else {
+      // Unix path: /home/user
+      if (path.charAt(0) === '/') {
+        segments.push({ name: '/', fullPath: '/' });
+        var rest = path.substring(1);
+        if (rest) {
+          var parts = rest.split('/').filter(function (s) { return s !== ''; });
+          var accumulated = '/';
+          for (var i = 0; i < parts.length; i++) {
+            accumulated = accumulated === '/' ? '/' + parts[i] : accumulated + '/' + parts[i];
+            segments.push({ name: parts[i], fullPath: accumulated });
+          }
+        }
+      } else {
+        // Relative path fallback
+        var parts = path.split('/').filter(function (s) { return s !== ''; });
+        var accumulated = '';
+        for (var i = 0; i < parts.length; i++) {
+          accumulated = accumulated ? accumulated + '/' + parts[i] : parts[i];
+          segments.push({ name: parts[i], fullPath: accumulated });
+        }
+      }
+    }
+
+    var html = '';
+    for (var i = 0; i < segments.length; i++) {
+      var seg = segments[i];
+      var isLast = (i === segments.length - 1);
+
+      // Add chevron separator between segments
+      if (i > 0) {
+        html += '<span class="ft-bc-sep">›</span>';
+      }
+
+      var cls = isLast ? 'ft-bc-segment ft-bc-current' : 'ft-bc-segment';
+      html += '<span class="' + cls + '" data-path="' + escapeAttr(seg.fullPath) + '" data-pane="' + pane + '">' + escapeHtml(seg.name) + '</span>';
+    }
+
+    containerEl.innerHTML = html;
+  }
+
+  /**
+   * Switch path bar to breadcrumb display mode.
+   */
+  function switchToBreadcrumb(pane) {
+    if (pane === 'local') {
+      if (els.localBreadcrumb) els.localBreadcrumb.style.display = '';
+      if (els.localPath) els.localPath.style.display = 'none';
+      localPathMode = 'breadcrumb';
+    } else {
+      if (els.remoteBreadcrumb) els.remoteBreadcrumb.style.display = '';
+      if (els.remotePath) els.remotePath.style.display = 'none';
+      remotePathMode = 'breadcrumb';
+    }
+  }
+
+  /**
+   * Switch path bar to editable text input mode.
+   */
+  function switchToInput(pane) {
+    if (pane === 'local') {
+      if (els.localBreadcrumb) els.localBreadcrumb.style.display = 'none';
+      if (els.localPath) {
+        els.localPath.style.display = '';
+        els.localPath.value = localPath;
+        els.localPath.focus();
+        els.localPath.select();
+      }
+      localPathMode = 'input';
+    } else {
+      if (els.remoteBreadcrumb) els.remoteBreadcrumb.style.display = 'none';
+      if (els.remotePath) {
+        els.remotePath.style.display = '';
+        els.remotePath.value = remotePath;
+        els.remotePath.focus();
+        els.remotePath.select();
+      }
+      remotePathMode = 'input';
     }
   }
 

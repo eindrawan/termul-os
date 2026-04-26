@@ -60,6 +60,7 @@ contextBridge.exposeInMainWorld('termulAPI', {
     sftpRename: (connectionId, oldPath, newPath) => ipcRenderer.invoke('ssh:sftpRename', connectionId, oldPath, newPath),
     sftpHome: (connectionId) => ipcRenderer.invoke('ssh:sftpHome', connectionId),
     sftpReadFile: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpReadFile', connectionId, remotePath),
+    sftpReadFileBase64: (connectionId, remotePath) => ipcRenderer.invoke('ssh:sftpReadFileBase64', connectionId, remotePath),
     sftpWriteFile: (connectionId, remotePath, content) => ipcRenderer.invoke('ssh:sftpWriteFile', connectionId, remotePath, content),
     exec: (connectionId, command) => ipcRenderer.invoke('ssh:exec', connectionId, command),
     onSftpProgress: (callback) => {

@@ -1,0 +1,377 @@
+/* Scheduler Plugin Styles */
+
+/* ─── Box-sizing reset for this plugin ────────────────────────────── */
+/* The shared .tui-input has width:100% + padding but no box-sizing,
+   which causes horizontal overflow in grid layouts. */
+.scheduler-container *,
+.scheduler-container *::before,
+.scheduler-container *::after {
+  box-sizing: border-box;
+}
+
+.scheduler-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--tui-bg-surface, #0f0f0f);
+  color: var(--tui-text-primary, #e0e0e0);
+  position: relative;
+  overflow: hidden;
+}
+
+.scheduler-content {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+  padding: 16px;
+}
+
+/* ─── Toolbar Select ──────────────────────────────────────────────── */
+.tui-select-sm {
+  padding: 4px 8px !important;
+  font-size: 12px !important;
+  min-width: 120px !important;
+}
+
+/* ─── Empty State Override ──────────────────────────────────────────── */
+/* Shared .tui-empty has no flex layout, so icon and text go inline.
+   Do NOT use display:flex !important — JS toggles display:none/flex. */
+.tui-empty {
+  flex-direction: column !important;
+  align-items: center !important;
+  justify-content: center !important;
+  min-height: 200px;
+}
+
+.tui-empty-icon {
+  display: block !important;
+}
+
+/* ─── Crontab Entry Row ────────────────────────────────────────────── */
+.cron-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cron-entry {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 16px;
+  background: var(--tui-bg-hover, rgba(255,255,255,0.04));
+  border: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  border-radius: var(--tui-radius-md, 8px);
+  transition: background var(--tui-transition-fast, 150ms ease);
+  min-width: 0;
+}
+
+.cron-entry:hover {
+  background: var(--tui-bg-active, rgba(255,255,255,0.07));
+}
+
+.cron-entry.disabled {
+  opacity: 0.5;
+}
+
+.cron-entry.disabled .cron-schedule-text {
+  text-decoration: line-through;
+}
+
+/* Enable/disable checkbox */
+.cron-checkbox {
+  flex-shrink: 0;
+  width: 18px;
+  height: 18px;
+  accent-color: var(--tui-accent-primary, #0067C0);
+  cursor: pointer;
+  margin: 0;
+}
+
+.cron-entry.disabled .cron-schedule-text {
+  text-decoration: line-through;
+}
+
+/* Schedule & command text */
+.cron-info {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  overflow: hidden;
+}
+
+.cron-schedule-text {
+  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+  font-size: 13px;
+  color: var(--tui-accent-secondary, #60CDFF);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.cron-command-text {
+  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+  font-size: 12px;
+  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Actions */
+.cron-actions {
+  display: flex;
+  gap: 4px;
+  flex-shrink: 0;
+  opacity: 0;
+  transition: opacity var(--tui-transition-fast, 150ms ease);
+}
+
+.cron-entry:hover .cron-actions {
+  opacity: 1;
+}
+
+/* ─── Form Overlay ─────────────────────────────────────────────────── */
+.cron-form-overlay {
+  display: none;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+}
+
+.cron-form-overlay.active {
+  display: flex;
+}
+
+.cron-form {
+  background: var(--tui-bg-elevated, rgba(28,28,28,0.95));
+  border: 1px solid var(--tui-border-medium, rgba(255,255,255,0.1));
+  border-radius: var(--tui-radius-lg, 12px);
+  width: 480px;
+  max-width: 90%;
+  box-shadow: var(--tui-shadow-lg, 0 4px 24px rgba(0,0,0,0.35));
+}
+
+.cron-form-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+}
+
+.cron-form-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tui-text-primary);
+}
+
+.cron-form-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* Schedule grid */
+.cron-schedule-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 10px;
+  min-width: 0;
+}
+
+.cron-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.cron-field-full {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cron-field-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.cron-field-input {
+  text-align: center;
+  font-family: var(--tui-font-mono, 'Cascadia Code', monospace);
+  font-size: 13px;
+}
+
+.cron-field-hint {
+  font-size: 10px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.3));
+  text-align: center;
+}
+
+/* Form actions */
+.cron-form-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding-top: 4px;
+}
+
+/* ─── Sudo Password Modal ─────────────────────────────────────────── */
+.cron-sudo-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.6);
+  z-index: 200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.cron-sudo-modal {
+  background: var(--tui-bg-elevated, rgba(28,28,28,0.95));
+  border: 1px solid var(--tui-border-medium, rgba(255,255,255,0.1));
+  border-radius: var(--tui-radius-lg, 12px);
+  width: 400px;
+  max-width: 90%;
+  box-shadow: var(--tui-shadow-lg, 0 4px 24px rgba(0,0,0,0.35));
+}
+
+.cron-sudo-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+}
+
+.cron-sudo-title {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--tui-text-primary);
+}
+
+.cron-sudo-body {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.cron-sudo-desc {
+  margin: 0;
+  font-size: 13px;
+  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
+  line-height: 1.5;
+}
+
+.cron-sudo-desc strong {
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+/* ─── Password Field with Eye Toggle ───────────────────────────────── */
+.cron-pw-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.cron-pw-input-wrap {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.cron-pw-input-wrap .tui-input {
+  padding-right: 40px !important;
+}
+
+.cron-pw-toggle {
+  position: absolute;
+  right: 8px;
+  background: none;
+  border: none;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--tui-radius-sm, 4px);
+  transition: color var(--tui-transition-fast, 150ms ease);
+}
+
+.cron-pw-toggle:hover {
+  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
+}
+
+.cron-sudo-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 0 20px 16px;
+}
+
+.cron-sudo-remember {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
+  cursor: pointer;
+}
+
+.cron-sudo-remember input[type="checkbox"] {
+  accent-color: var(--tui-accent-primary, #0067C0);
+}
+
+/* ─── Loading ──────────────────────────────────────────────────────── */
+.scheduler-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 120px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  font-size: 13px;
+  gap: 8px;
+}
+
+.scheduler-loading .tui-status-dot {
+  display: inline-block;
+}
+
+/* ─── Small Buttons ────────────────────────────────────────────────── */
+.tui-btn-sm {
+  padding: 4px 10px !important;
+  font-size: 12px !important;
+}
+
+.tui-btn-sm svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ─── Error State ──────────────────────────────────────────────────── */
+.scheduler-error {
+  padding: 16px;
+  color: var(--tui-error-text, #ff6b6b);
+  font-size: 13px;
+  text-align: center;
+}

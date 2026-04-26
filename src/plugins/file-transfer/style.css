@@ -125,6 +125,9 @@
 .ft-path-input {
   flex: 1;
   padding: 4px 8px;
+  height: 26px;
+  box-sizing: border-box;
+  line-height: 1;
   background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
   border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
@@ -143,6 +146,64 @@
 
 .ft-path-input::placeholder {
   color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+}
+
+/* ─── Path Breadcrumb ──────────────────────────────────────────────── */
+.ft-path-breadcrumb {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  min-width: 0;
+  height: 26px;
+  box-sizing: border-box;
+  padding: 4px 8px;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  border-radius: var(--tui-radius-sm, 4px);
+  font-size: 12px;
+  font-family: var(--tui-font-mono, monospace);
+  color: var(--tui-text-primary);
+  overflow: hidden;
+  white-space: nowrap;
+  user-select: none;
+  cursor: default;
+  transition: background 150ms ease, border-color 150ms ease;
+}
+
+.ft-path-breadcrumb:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ft-bc-segment {
+  padding: 1px 4px;
+  border-radius: 3px;
+  cursor: pointer;
+  color: var(--tui-text-secondary, rgba(255,255,255,0.6));
+  transition: background 120ms ease, color 120ms ease;
+  flex-shrink: 0;
+}
+
+.ft-bc-segment:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--tui-text-primary);
+}
+
+.ft-bc-current {
+  color: var(--tui-text-primary);
+  cursor: default;
+  font-weight: 500;
+}
+
+.ft-bc-current:hover {
+  background: transparent;
+  color: var(--tui-text-primary);
+}
+
+.ft-bc-sep {
+  color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+  margin: 0 2px;
+  flex-shrink: 0;
+  user-select: none;
 }
 
 .ft-path-go,

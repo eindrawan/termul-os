@@ -1,0 +1,13 @@
+{
+  "name": "Scheduler",
+  "description": "GUI for editing crontab entries",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "scheduler",
+  "icon": "icon.svg",
+  "window": {
+    "width": 750,
+    "height": 550
+  },
+  "permissions": ["ssh"]
+}

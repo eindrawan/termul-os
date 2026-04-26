@@ -1616,6 +1616,58 @@ input {
   color: #FF6B6B;
 }
 
+/* Desktop context menu */
+.desktop-context-menu {
+  position: fixed;
+  background: var(--bg-mica-light);
+  backdrop-filter: blur(40px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 1000;
+  min-width: 180px;
+}
+
+.desktop-context-menu .context-separator {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-xs) 0;
+}
+
+.context-remove:hover {
+  background: rgba(232, 17, 35, 0.15);
+  color: #FF6B6B;
+}
+
+.context-restore:hover {
+  background: var(--bg-hover);
+}
+
+/* Taskbar context menu */
+.taskbar-context-menu {
+  position: fixed;
+  background: var(--bg-mica-light);
+  backdrop-filter: blur(40px);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow-lg);
+  overflow: hidden;
+  z-index: 1000;
+  min-width: 180px;
+}
+
+.taskbar-context-menu .context-separator {
+  height: 1px;
+  background: var(--border-subtle);
+  margin: var(--space-xs) 0;
+}
+
+.context-close:hover {
+  background: rgba(232, 17, 35, 0.15);
+  color: #FF6B6B;
+}
+
 /* ─── Taskbar ──────────────────────────────────────────────────────── */
 #os-taskbar {
   position: fixed;
@@ -1700,6 +1752,33 @@ input {
 
 .taskbar-app-btn.minimized {
   opacity: 0.6;
+}
+
+.taskbar-pinned-app .taskbar-app-pin-indicator {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  opacity: 0.8;
+}
+
+.taskbar-pinned-running {
+  position: relative;
+}
+
+.taskbar-pinned-running::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  width: 6px;
+  height: 6px;
+  background: var(--accent-primary);
+  border-radius: 50%;
+  opacity: 0.8;
 }
 
 .taskbar-app-icon {

@@ -1,0 +1,112 @@
+<div class="viewer-container">
+  <!-- Toolbar -->
+  <div class="tui-toolbar">
+    <div class="tui-toolbar-left">
+      <span class="tui-toolbar-title" id="fv-title">File Viewer</span>
+    </div>
+    <div class="tui-toolbar-right">
+      <button class="tui-btn-icon" id="fv-open-local" title="Open Local File">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+      </button>
+      <button class="tui-btn-icon" id="fv-open-remote" title="Open Remote File">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/>
+          <path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/>
+        </svg>
+      </button>
+      <div class="fv-toolbar-separator"></div>
+      <!-- Zoom controls (visible when viewing an image) -->
+      <button class="tui-btn-icon" id="fv-zoom-out" title="Zoom Out" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+      </button>
+      <span class="fv-zoom-label" id="fv-zoom-label" style="display:none;">100%</span>
+      <button class="tui-btn-icon" id="fv-zoom-in" title="Zoom In" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+          <line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>
+        </svg>
+      </button>
+      <button class="tui-btn-icon" id="fv-zoom-fit" title="Fit to Window" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+        </svg>
+      </button>
+      <button class="tui-btn-icon" id="fv-zoom-actual" title="Actual Size (1:1)" style="display:none;">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <path d="M8 12h8M12 8v8"/>
+        </svg>
+      </button>
+    </div>
+  </div>
+
+  <!-- Tab bar for open files -->
+  <div class="fv-tabs" id="fv-tabs">
+    <div class="fv-tabs-scroll" id="fv-tabs-scroll">
+      <!-- Tab items rendered dynamically -->
+    </div>
+  </div>
+
+  <!-- Viewer area -->
+  <div class="fv-viewer-wrapper" id="fv-viewer-wrapper">
+    <!-- Empty state -->
+    <div class="fv-empty" id="fv-empty">
+      <div class="fv-empty-icon">
+        <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1">
+          <rect x="3" y="3" width="18" height="18" rx="2"/>
+          <circle cx="8.5" cy="8.5" r="1.5"/>
+          <path d="M21 15l-5-5L5 21"/>
+        </svg>
+      </div>
+      <p class="fv-empty-text">Open an image or PDF to view</p>
+      <div class="fv-empty-shortcuts">
+        <button class="tui-btn tui-btn-default" id="fv-empty-open-local">Open Local File</button>
+        <button class="tui-btn tui-btn-default" id="fv-empty-open-remote">Open Remote File</button>
+      </div>
+      <p class="fv-empty-formats">Supported: PNG, JPG, GIF, BMP, SVG, WebP, ICO, PDF</p>
+    </div>
+    <!-- Active viewer content (image or PDF iframe) rendered dynamically -->
+    <div class="fv-content" id="fv-content" style="display:none;"></div>
+  </div>
+
+  <!-- Status bar -->
+  <div class="fv-statusbar" id="fv-statusbar">
+    <div class="fv-statusbar-left">
+      <span class="fv-status-item" id="fv-status-file">No file open</span>
+    </div>
+    <div class="fv-statusbar-right">
+      <span class="fv-status-item" id="fv-status-type">—</span>
+      <span class="fv-status-sep">|</span>
+      <span class="fv-status-item" id="fv-status-source">—</span>
+      <span class="fv-status-sep">|</span>
+      <span class="fv-status-item" id="fv-status-size">—</span>
+    </div>
+  </div>
+
+  <!-- Remote file open dialog -->
+  <div class="fv-modal-backdrop" id="fv-remote-modal">
+    <div class="fv-modal">
+      <div class="fv-modal-header">
+        <span class="fv-modal-title">Open Remote File</span>
+        <button class="tui-btn-icon" id="fv-remote-modal-close">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+      <div class="fv-modal-body">
+        <label class="fv-modal-label">File path on remote server:</label>
+        <input type="text" class="tui-input fv-modal-input" id="fv-remote-path" placeholder="/home/user/image.png" />
+      </div>
+      <div class="fv-modal-footer">
+        <button class="tui-btn tui-btn-default" id="fv-remote-cancel">Cancel</button>
+        <button class="tui-btn tui-btn-accent" id="fv-remote-ok">Open</button>
+      </div>
+    </div>
+  </div>
+</div>

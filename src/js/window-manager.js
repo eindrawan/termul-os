@@ -536,6 +536,7 @@ class WindowManager {
         id: id,
         name: win.plugin.name,
         icon: win.plugin.icon,
+        pluginDirName: win.plugin.dirName,
         minimized: win.minimized,
         active: this.activeWindowId === id
       });
