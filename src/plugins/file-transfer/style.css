@@ -298,6 +298,7 @@
   border-bottom: 1px solid transparent;
   transition: background 120ms ease;
   user-select: none;
+  outline: none; /* suppress focus ring — selection state is used instead */
 }
 
 .ft-row:hover {
@@ -568,6 +569,17 @@
 
 .ft-queue-item-status.ft-error {
   color: var(--tui-error-text, #ff6b6b);
+}
+
+/* ─── Completed/Failed Transfer States ───────────────────────────────── */
+.ft-queue-item.ft-completed,
+.ft-queue-item.ft-failed {
+  opacity: 0.6;
+}
+
+.ft-queue-item.ft-completed .ft-queue-item-name,
+.ft-queue-item.ft-failed .ft-queue-item-name {
+  color: var(--tui-text-secondary, rgba(255,255,255,0.6));
 }
 
 /* ─── Context Menu (Windows 11 Acrylic) ─────────────────────────────── */

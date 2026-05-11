@@ -44,12 +44,12 @@ class TuiModal extends TuiComponent {
       title.textContent = this.opts.title;
       header.appendChild(title);
 
-      const closeBtn = document.createElement('button');
-      closeBtn.className = 'tui-btn-icon tui-modal-close';
-      closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.5"/></svg>';
-      closeBtn.title = 'Close';
-      this.listen(closeBtn, 'click', () => this.close());
-      header.appendChild(closeBtn);
+      // const closeBtn = document.createElement('button');
+      // closeBtn.className = 'tui-btn-icon tui-modal-close';
+      // closeBtn.innerHTML = '<svg width="14" height="14" viewBox="0 0 12 12"><line x1="2" y1="2" x2="10" y2="10" stroke="currentColor" stroke-width="1.5"/><line x1="10" y1="2" x2="2" y2="10" stroke="currentColor" stroke-width="1.5"/></svg>';
+      // closeBtn.title = 'Close';
+      // this.listen(closeBtn, 'click', () => this.close());
+      // header.appendChild(closeBtn);
       dialog.appendChild(header);
     }
 

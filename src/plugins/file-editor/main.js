@@ -12,111 +12,131 @@
   var api = PLUGIN_API;
 
   // ─── State ──────────────────────────────────────────────────────────
-  var openFiles = [];           // { id, source, path, name, content, originalContent, language, modified }
+  var openFiles = []; // { id, source, path, name, content, originalContent, language, modified }
   var activeFileId = null;
   var editor = null;
   var resizeObserver = null;
 
   // Source type: 'local' or 'remote'
-  var SOURCE_LOCAL = 'local';
-  var SOURCE_REMOTE = 'remote';
+  var SOURCE_LOCAL = "local";
+  var SOURCE_REMOTE = "remote";
 
   // Language mapping for file extensions
   var LANGUAGE_MAP = {
-    'js': 'javascript', 'jsx': 'javascript', 'mjs': 'javascript', 'cjs': 'javascript',
-    'ts': 'typescript', 'tsx': 'typescript',
-    'py': 'python', 'pyw': 'python',
-    'css': 'css', 'scss': 'css', 'less': 'css',
-    'html': 'html', 'htm': 'html',
-    'json': 'json',
-    'md': 'markdown', 'markdown': 'markdown',
-    'xml': 'xml', 'xaml': 'xml', 'svg': 'xml',
-    'yaml': 'yaml', 'yml': 'yaml',
-    'sh': 'shell', 'bash': 'shell', 'zsh': 'shell', 'fish': 'shell',
-    'sql': 'sql',
-    'c': 'c', 'h': 'c',
-    'cpp': 'cpp', 'cc': 'cpp', 'cxx': 'cpp', 'hpp': 'cpp', 'hxx': 'cpp',
-    'cs': 'csharp',
-    'go': 'go',
-    'rs': 'rust',
-    'java': 'java',
-    'php': 'php',
-    'rb': 'ruby',
-    'lua': 'lua',
-    'dockerfile': 'dockerfile', 'containerfile': 'dockerfile',
-    'ini': 'ini', 'cfg': 'ini', 'conf': 'ini',
-    'txt': 'plaintext',
+    js: "javascript",
+    jsx: "javascript",
+    mjs: "javascript",
+    cjs: "javascript",
+    ts: "typescript",
+    tsx: "typescript",
+    py: "python",
+    pyw: "python",
+    css: "css",
+    scss: "css",
+    less: "css",
+    html: "html",
+    htm: "html",
+    json: "json",
+    md: "markdown",
+    markdown: "markdown",
+    xml: "xml",
+    xaml: "xml",
+    svg: "xml",
+    yaml: "yaml",
+    yml: "yaml",
+    sh: "shell",
+    bash: "shell",
+    zsh: "shell",
+    fish: "shell",
+    sql: "sql",
+    c: "c",
+    h: "c",
+    cpp: "cpp",
+    cc: "cpp",
+    cxx: "cpp",
+    hpp: "cpp",
+    hxx: "cpp",
+    cs: "csharp",
+    go: "go",
+    rs: "rust",
+    java: "java",
+    php: "php",
+    rb: "ruby",
+    lua: "lua",
+    dockerfile: "dockerfile",
+    containerfile: "dockerfile",
+    ini: "ini",
+    cfg: "ini",
+    conf: "ini",
+    txt: "plaintext",
   };
+
+  // ─── Protocol Helper ──────────────────────────────────────────────
+
+  function isFtp() {
+    var profile = api.profile;
+    return (profile && profile.protocol) === "ftp";
+  }
 
   // DOM element cache
   var els = {};
 
   // ─── Icons ───────────────────────────────────────────────────────────
-  var ICON_LOCAL = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
-  var ICON_REMOTE = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
-  var ICON_CLOSE = '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+  var ICON_LOCAL =
+    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>';
+  var ICON_REMOTE =
+    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>';
+  var ICON_CLOSE =
+    '<svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
 
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
   PLUGIN_LIFECYCLE.onMount(function () {
     // Cache DOM elements
-    els.openLocalBtn = shadow.getElementById('fe-open-local');
-    els.openRemoteBtn = shadow.getElementById('fe-open-remote');
-    els.saveBtn = shadow.getElementById('fe-save');
-    els.languageSelect = shadow.getElementById('fe-language');
-    els.tabsScroll = shadow.getElementById('fe-tabs-scroll');
-    els.editorArea = shadow.getElementById('fe-editor-area');
-    els.editorWrapper = shadow.getElementById('fe-editor-wrapper');
-    els.empty = shadow.getElementById('fe-empty');
-    els.emptyOpenLocal = shadow.getElementById('fe-empty-open-local');
-    els.emptyOpenRemote = shadow.getElementById('fe-empty-open-remote');
+    els.openLocalBtn = shadow.getElementById("fe-open-local");
+    els.openRemoteBtn = shadow.getElementById("fe-open-remote");
+    els.saveBtn = shadow.getElementById("fe-save");
+    els.languageSelect = shadow.getElementById("fe-language");
+    els.tabsScroll = shadow.getElementById("fe-tabs-scroll");
+    els.editorArea = shadow.getElementById("fe-editor-area");
+    els.editorWrapper = shadow.getElementById("fe-editor-wrapper");
+    els.empty = shadow.getElementById("fe-empty");
+    els.emptyOpenLocal = shadow.getElementById("fe-empty-open-local");
+    els.emptyOpenRemote = shadow.getElementById("fe-empty-open-remote");
 
     // Status bar elements
-    els.statusFile = shadow.getElementById('fe-status-file');
-    els.statusModified = shadow.getElementById('fe-status-modified');
-    els.statusSource = shadow.getElementById('fe-status-source');
-    els.statusLang = shadow.getElementById('fe-status-lang');
-    els.statusEncoding = shadow.getElementById('fe-status-encoding');
-    els.statusPosition = shadow.getElementById('fe-status-position');
-
-    // Remote modal elements
-    els.remoteModal = shadow.getElementById('fe-remote-modal');
-    els.remotePathInput = shadow.getElementById('fe-remote-path');
-    els.remoteOk = shadow.getElementById('fe-remote-ok');
-    els.remoteCancel = shadow.getElementById('fe-remote-cancel');
-    els.remoteClose = shadow.getElementById('fe-remote-modal-close');
+    els.statusFile = shadow.getElementById("fe-status-file");
+    els.statusModified = shadow.getElementById("fe-status-modified");
+    els.statusSource = shadow.getElementById("fe-status-source");
+    els.statusLang = shadow.getElementById("fe-status-lang");
+    els.statusEncoding = shadow.getElementById("fe-status-encoding");
+    els.statusPosition = shadow.getElementById("fe-status-position");
 
     // Bind event listeners
-    addEventListener(els.openLocalBtn, 'click', openLocalFileDialog);
-    addEventListener(els.openRemoteBtn, 'click', showRemoteFileDialog);
-    addEventListener(els.saveBtn, 'click', saveCurrentFile);
-    addEventListener(els.languageSelect, 'change', onLanguageChange);
+    addEventListener(els.openLocalBtn, "click", openLocalFileDialog);
+    addEventListener(els.openRemoteBtn, "click", showRemoteFileDialog);
+    addEventListener(els.saveBtn, "click", saveCurrentFile);
+    addEventListener(els.languageSelect, "change", onLanguageChange);
 
     // Empty state buttons
-    addEventListener(els.emptyOpenLocal, 'click', openLocalFileDialog);
-    addEventListener(els.emptyOpenRemote, 'click', showRemoteFileDialog);
+    addEventListener(els.emptyOpenLocal, "click", openLocalFileDialog);
+    addEventListener(els.emptyOpenRemote, "click", showRemoteFileDialog);
 
     // Remote modal events
-    addEventListener(els.remoteOk, 'click', openRemoteFile);
-    addEventListener(els.remoteCancel, 'click', hideRemoteFileDialog);
-    addEventListener(els.remoteClose, 'click', hideRemoteFileDialog);
-    addEventListener(els.remotePathInput, 'keydown', function (e) {
-      if (e.key === 'Enter') openRemoteFile();
-      if (e.key === 'Escape') hideRemoteFileDialog();
-    });
+    // (remote file dialog now uses api.ui.modal — no HTML modal needed)
 
     // Keyboard shortcut: Ctrl+S to save
-    shadow.addEventListener('keydown', function (e) {
-      if (e.ctrlKey && e.key === 's') {
+    shadow.addEventListener("keydown", function (e) {
+      if (e.ctrlKey && e.key === "s") {
         e.preventDefault();
         saveCurrentFile();
       }
     });
 
     // Listen for external "open file" requests (e.g. from file-transfer plugin)
-    api.events.on('editor-open-file', function (detail) {
+    api.events.on("editor-open-file", function (detail) {
       if (!detail || !detail.path) return;
-      openFileFromExternal(detail.path, detail.source || 'local');
+      openFileFromExternal(detail.path, detail.source || "local");
     });
 
     // Initialize Monaco when ready
@@ -152,12 +172,15 @@
     var maxWait = 100;
     var waited = 0;
     while (!window.monaco && waited < maxWait) {
-      await new Promise(function (r) { return setTimeout(r, 100); });
+      await new Promise(function (r) {
+        return setTimeout(r, 100);
+      });
       waited++;
     }
 
     if (!window.monaco) {
-      els.empty.innerHTML = '<div class="fe-loading"><span class="fe-loading-text" style="color:#ff6b6b">Failed to load Monaco Editor</span></div>';
+      els.empty.innerHTML =
+        '<div class="fe-loading"><span class="fe-loading-text" style="color:#ff6b6b">Failed to load Monaco Editor</span></div>';
       return;
     }
 
@@ -175,10 +198,10 @@
     // <style class="monaco-colors"> directly into the shadow root.
     var monacoCSS = window.PluginLoader._monacoCSS;
     if (monacoCSS) {
-      var existingStyle = shadow.querySelector('style[data-monaco]');
+      var existingStyle = shadow.querySelector("style[data-monaco]");
       if (!existingStyle) {
-        var monacoStyle = document.createElement('style');
-        monacoStyle.setAttribute('data-monaco', 'true');
+        var monacoStyle = document.createElement("style");
+        monacoStyle.setAttribute("data-monaco", "true");
         monacoStyle.textContent = monacoCSS;
         shadow.insertBefore(monacoStyle, shadow.firstChild);
       }
@@ -186,29 +209,31 @@
       // Fallback: if the CSS wasn't fetched by app.js, inject a <link> element.
       // This is less reliable (race condition with editor creation) but works
       // as a safety net.
-      var baseUrl = window.termulAPI && window.termulAPI.monaco
-        ? window.termulAPI.monaco.getBaseUrl()
-        : '';
+      var baseUrl =
+        window.termulAPI && window.termulAPI.monaco
+          ? window.termulAPI.monaco.getBaseUrl()
+          : "";
       if (baseUrl) {
-        var cssLink = document.createElement('link');
-        cssLink.rel = 'stylesheet';
-        cssLink.href = baseUrl + 'editor/editor.main.css';
+        var cssLink = document.createElement("link");
+        cssLink.rel = "stylesheet";
+        cssLink.href = baseUrl + "editor/editor.main.css";
         shadow.insertBefore(cssLink, shadow.firstChild);
       }
     }
 
     // Create Monaco editor
     editor = window.monaco.editor.create(els.editorArea, {
-      value: '',
-      language: 'plaintext',
-      theme: 'vs-dark',
+      value: "",
+      language: "plaintext",
+      theme: "vs-dark",
       automaticLayout: false,
       fontSize: 14,
-      fontFamily: "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
-      lineNumbers: 'on',
+      fontFamily:
+        "'Cascadia Code', 'Fira Code', 'JetBrains Mono', 'Consolas', monospace",
+      lineNumbers: "on",
       minimap: { enabled: true },
       scrollBeyondLastLine: false,
-      wordWrap: 'off',
+      wordWrap: "off",
       tabSize: 2,
       insertSpaces: true,
       detectIndentation: true,
@@ -219,8 +244,8 @@
         indentation: true,
       },
       smoothScrolling: true,
-      cursorBlinking: 'smooth',
-      cursorSmoothCaretAnimation: 'on',
+      cursorBlinking: "smooth",
+      cursorSmoothCaretAnimation: "on",
       formatOnPaste: true,
       formatOnType: true,
     });
@@ -236,7 +261,7 @@
     });
 
     // Auto-resize on container resize
-    if (typeof ResizeObserver !== 'undefined') {
+    if (typeof ResizeObserver !== "undefined") {
       resizeObserver = new ResizeObserver(function () {
         if (editor) editor.layout();
       });
@@ -251,14 +276,20 @@
 
   async function openLocalFileDialog() {
     var result = await window.termulAPI.dialog.openFile({
-      title: 'Open File',
+      title: "Open File",
       filters: [
-        { name: 'All Files', extensions: ['*'] },
-        { name: 'Text Files', extensions: ['txt', 'md', 'csv'] },
-        { name: 'Code', extensions: ['js', 'ts', 'py', 'cpp', 'c', 'go', 'rs', 'java'] },
-        { name: 'Web', extensions: ['html', 'css', 'js', 'json'] },
-        { name: 'Config', extensions: ['yaml', 'yml', 'json', 'ini', 'conf', 'xml'] },
-      ]
+        { name: "All Files", extensions: ["*"] },
+        { name: "Text Files", extensions: ["txt", "md", "csv"] },
+        {
+          name: "Code",
+          extensions: ["js", "ts", "py", "cpp", "c", "go", "rs", "java"],
+        },
+        { name: "Web", extensions: ["html", "css", "js", "json"] },
+        {
+          name: "Config",
+          extensions: ["yaml", "yml", "json", "ini", "conf", "xml"],
+        },
+      ],
     });
 
     if (result.canceled || result.filePaths.length === 0) return;
@@ -270,31 +301,57 @@
   function showRemoteFileDialog() {
     if (!api.connectionId) {
       var toast = api.ui.toast();
-      toast.show('Not connected to SSH server', 'error');
+      toast.show("Not connected to SSH server", "error");
       return;
     }
-    els.remotePathInput.value = '';
-    els.remoteModal.classList.add('open');
-    els.remotePathInput.focus();
-  }
-
-  function hideRemoteFileDialog() {
-    els.remoteModal.classList.remove('open');
-  }
-
-  async function openRemoteFile() {
-    var remotePath = els.remotePathInput.value.trim();
-    if (!remotePath) return;
-
-    hideRemoteFileDialog();
-    await openFile(remotePath, SOURCE_REMOTE);
+    var modal = api.ui.modal({
+      title: "Open Remote File",
+      content:
+        '<label style="display:block;margin-bottom:6px;font-size:13px;color:var(--tui-text-secondary);">File path on remote server:</label>' +
+        '<input type="text" class="tui-input" id="fe-remote-path-input" placeholder="/etc/config.yml" style="width:100%;">',
+      buttons: [
+        {
+          label: "Cancel",
+          variant: "default",
+          onClick: function (m) {
+            m.close();
+          },
+        },
+        {
+          label: "Open",
+          variant: "primary",
+          onClick: function (m) {
+            var remotePath = m.el
+              .querySelector("#fe-remote-path-input")
+              .value.trim();
+            if (!remotePath) return;
+            m.close();
+            openFile(remotePath, SOURCE_REMOTE);
+          },
+        },
+      ],
+    });
+    modal.open();
+    setTimeout(function () {
+      var input = modal.el.querySelector("#fe-remote-path-input");
+      if (input) {
+        input.focus();
+        input.addEventListener("keydown", function (e) {
+          if (e.key === "Enter") {
+            var openBtn = modal.el.querySelector(".tui-btn-primary");
+            if (openBtn) openBtn.click();
+          }
+        });
+      }
+    }, 50);
   }
 
   async function openFile(path, source) {
     // Show loading state
-    els.empty.style.display = 'flex';
-    els.empty.innerHTML = '<div class="fe-loading"><div class="tui-spinner"></div><span class="fe-loading-text">Loading file...</span></div>';
-    els.editorArea.style.display = 'none';
+    els.empty.style.display = "flex";
+    els.empty.innerHTML =
+      '<div class="fe-loading"><div class="tui-spinner"></div><span class="fe-loading-text">Loading file...</span></div>';
+    els.editorArea.style.display = "none";
 
     try {
       var content, language;
@@ -302,20 +359,28 @@
       if (source === SOURCE_LOCAL) {
         var result = await window.termulAPI.fs.readFile(path);
         if (!result.success) {
-          showError('Failed to read file: ' + result.error);
+          showError("Failed to read file: " + result.error);
           restoreEditorState();
           return;
         }
         content = result.content;
       } else {
         if (!api.connectionId) {
-          showError('Not connected to SSH server');
+          showError("Not connected to remote server");
           restoreEditorState();
           return;
         }
-        var result = await window.termulAPI.ssh.sftpReadFile(api.connectionId, path);
+        var result;
+        if (isFtp()) {
+          result = await window.termulAPI.ftp.readFile(api.connectionId, path);
+        } else {
+          result = await window.termulAPI.ssh.sftpReadFile(
+            api.connectionId,
+            path,
+          );
+        }
         if (!result.success) {
-          showError('Failed to read remote file: ' + result.error);
+          showError("Failed to read remote file: " + result.error);
           restoreEditorState();
           return;
         }
@@ -335,15 +400,14 @@
         content: content,
         originalContent: content,
         language: language,
-        modified: false
+        modified: false,
       };
 
       openFiles.push(fileData);
       setActiveFile(fileId);
       renderTabs();
-
     } catch (err) {
-      showError('Failed to open file: ' + err.message);
+      showError("Failed to open file: " + err.message);
       restoreEditorState();
     }
   }
@@ -357,11 +421,13 @@
     if (!editor) {
       // Retry up to 50 times (5 seconds)
       for (var i = 0; i < 50; i++) {
-        await new Promise(function (r) { return setTimeout(r, 100); });
+        await new Promise(function (r) {
+          return setTimeout(r, 100);
+        });
         if (editor) break;
       }
       if (!editor) {
-        showError('Editor failed to initialize');
+        showError("Editor failed to initialize");
         return;
       }
     }
@@ -371,7 +437,9 @@
   async function saveCurrentFile() {
     if (!activeFileId) return;
 
-    var file = openFiles.find(function (f) { return f.id === activeFileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === activeFileId;
+    });
     if (!file || !file.modified) return;
 
     try {
@@ -380,17 +448,30 @@
       if (file.source === SOURCE_LOCAL) {
         var result = await window.termulAPI.fs.writeFile(file.path, content);
         if (!result.success) {
-          showError('Failed to save file: ' + result.error);
+          showError("Failed to save file: " + result.error);
           return;
         }
       } else {
         if (!api.connectionId) {
-          showError('Not connected to SSH server');
+          showError("Not connected to remote server");
           return;
         }
-        var result = await window.termulAPI.ssh.sftpWriteFile(api.connectionId, file.path, content);
+        var result;
+        if (isFtp()) {
+          result = await window.termulAPI.ftp.writeFile(
+            api.connectionId,
+            file.path,
+            content,
+          );
+        } else {
+          result = await window.termulAPI.ssh.sftpWriteFile(
+            api.connectionId,
+            file.path,
+            content,
+          );
+        }
         if (!result.success) {
-          showError('Failed to save remote file: ' + result.error);
+          showError("Failed to save remote file: " + result.error);
           return;
         }
       }
@@ -405,23 +486,35 @@
       updateStatusBar();
 
       var toast = api.ui.toast();
-      toast.show('File saved: ' + file.name, 'success');
-
+      toast.show("File saved: " + file.name, "success");
     } catch (err) {
-      showError('Failed to save file: ' + err.message);
+      showError("Failed to save file: " + err.message);
     }
   }
 
   function closeFile(fileId) {
-    var file = openFiles.find(function (f) { return f.id === fileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === fileId;
+    });
     if (!file) return;
 
     // Check for unsaved changes
     if (file.modified) {
-      var confirmed = confirmCloseFile(file);
-      if (!confirmed) return;
+      confirmCloseFile(file, function (proceed) {
+        if (!proceed) return;
+        doCloseFile(fileId);
+      });
+      return;
     }
 
+    doCloseFile(fileId);
+  }
+
+  function doCloseFile(fileId) {
+    var file = openFiles.find(function (f) {
+      return f.id === fileId;
+    });
+    if (!file) return;
     var idx = openFiles.indexOf(file);
     openFiles.splice(idx, 1);
 
@@ -431,7 +524,7 @@
         setActiveFile(openFiles[newIdx].id);
       } else {
         activeFileId = null;
-        if (editor) editor.setValue('');
+        if (editor) editor.setValue("");
         restoreEmptyState();
       }
     }
@@ -440,23 +533,62 @@
     updateStatusBar();
   }
 
-  function confirmCloseFile(file) {
-    // Simple implementation - could be a modal dialog
-    return window.confirm('Save changes to "' + file.name + '" before closing?');
+  function confirmCloseFile(file, onResult) {
+    var modal = api.ui.modal({
+      title: "Unsaved Changes",
+      content:
+        '<p class="tui-modal-message">Save changes to "' +
+        escapeHtml(file.name) +
+        '" before closing?</p>',
+      buttons: [
+        {
+          label: "Cancel",
+          variant: "default",
+          onClick: function (m) {
+            m.close();
+            onResult(false);
+          },
+        },
+        {
+          label: "Don't Save",
+          variant: "default",
+          onClick: function (m) {
+            m.close();
+            onResult(true);
+          },
+        },
+        {
+          label: "Save",
+          variant: "primary",
+          onClick: function (m) {
+            m.close();
+            saveCurrentFile().then(function () {
+              // Only proceed if save succeeded (file.modified will be false on success)
+              var f = openFiles.find(function (x) {
+                return x.id === file.id;
+              });
+              onResult(f ? !f.modified : true);
+            });
+          },
+        },
+      ],
+    });
+    modal.open();
   }
 
   /**
    * Restore the empty/welcome state after all files are closed or on error.
    */
   function restoreEmptyState() {
-    els.editorArea.style.display = 'none';
-    els.empty.style.display = 'flex';
-    els.empty.innerHTML = '<div class="fe-empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div><p class="fe-empty-text">Open a file to start editing</p><div class="fe-empty-shortcuts"><button class="tui-btn tui-btn-default" id="fe-empty-open-local">Open Local File</button><button class="tui-btn tui-btn-default" id="fe-empty-open-remote">Open Remote File</button></div>';
+    els.editorArea.style.display = "none";
+    els.empty.style.display = "flex";
+    els.empty.innerHTML =
+      '<div class="fe-empty-icon"><svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg></div><p class="fe-empty-text">Open a file to start editing</p><div class="fe-empty-shortcuts"><button class="tui-btn tui-btn-default" id="fe-empty-open-local">Open Local File</button><button class="tui-btn tui-btn-default" id="fe-empty-open-remote">Open Remote File</button></div>';
     // Re-bind buttons after innerHTML change
-    els.emptyOpenLocal = shadow.getElementById('fe-empty-open-local');
-    els.emptyOpenRemote = shadow.getElementById('fe-empty-open-remote');
-    addEventListener(els.emptyOpenLocal, 'click', openLocalFileDialog);
-    addEventListener(els.emptyOpenRemote, 'click', showRemoteFileDialog);
+    els.emptyOpenLocal = shadow.getElementById("fe-empty-open-local");
+    els.emptyOpenRemote = shadow.getElementById("fe-empty-open-remote");
+    addEventListener(els.emptyOpenLocal, "click", openLocalFileDialog);
+    addEventListener(els.emptyOpenRemote, "click", showRemoteFileDialog);
   }
 
   /**
@@ -465,10 +597,12 @@
    */
   function restoreEditorState() {
     if (openFiles.length > 0 && activeFileId) {
-      var file = openFiles.find(function (f) { return f.id === activeFileId; });
+      var file = openFiles.find(function (f) {
+        return f.id === activeFileId;
+      });
       if (file) {
-        els.empty.style.display = 'none';
-        els.editorArea.style.display = 'block';
+        els.empty.style.display = "none";
+        els.editorArea.style.display = "block";
         if (editor) {
           editor.layout();
         }
@@ -481,44 +615,62 @@
   // ─── Tab Management ──────────────────────────────────────────────────
 
   function renderTabs() {
-    var html = '';
+    var html = "";
     for (var i = 0; i < openFiles.length; i++) {
       var file = openFiles[i];
-      var isActive = file.id === activeFileId ? ' active' : '';
-      var isModified = file.modified ? ' modified' : '';
+      var isActive = file.id === activeFileId ? " active" : "";
+      var isModified = file.modified ? " modified" : "";
       var sourceIcon = file.source === SOURCE_LOCAL ? ICON_LOCAL : ICON_REMOTE;
 
-      html += '<div class="fe-tab' + isActive + isModified + '" data-file-id="' + file.id + '">';
-      html += '<div class="fe-tab-icon ' + file.source + '">' + sourceIcon + '</div>';
-      html += '<span class="fe-tab-name">' + escapeHtml(file.name) + '</span>';
+      html +=
+        '<div class="fe-tab' +
+        isActive +
+        isModified +
+        '" data-file-id="' +
+        file.id +
+        '">';
+      html +=
+        '<div class="fe-tab-icon ' + file.source + '">' + sourceIcon + "</div>";
+      html += '<span class="fe-tab-name">' + escapeHtml(file.name) + "</span>";
       html += '<span class="fe-tab-dot"></span>';
-      html += '<button class="fe-tab-close" title="Close">' + ICON_CLOSE + '</button>';
-      html += '</div>';
+      html +=
+        '<button class="fe-tab-close" title="Close">' +
+        ICON_CLOSE +
+        "</button>";
+      html += "</div>";
     }
 
     els.tabsScroll.innerHTML = html;
 
     // Bind tab click events
-    var tabs = els.tabsScroll.querySelectorAll('.fe-tab');
+    var tabs = els.tabsScroll.querySelectorAll(".fe-tab");
     for (var i = 0; i < tabs.length; i++) {
       var tab = tabs[i];
-      var fileId = tab.getAttribute('data-file-id');
+      var fileId = tab.getAttribute("data-file-id");
 
-      addEventListener(tab, 'click', function (fid) {
-        return function (e) {
-          if (!e.target.closest('.fe-tab-close')) {
-            setActiveFile(fid);
-          }
-        };
-      }(fileId));
+      addEventListener(
+        tab,
+        "click",
+        (function (fid) {
+          return function (e) {
+            if (!e.target.closest(".fe-tab-close")) {
+              setActiveFile(fid);
+            }
+          };
+        })(fileId),
+      );
 
-      var closeBtn = tab.querySelector('.fe-tab-close');
-      addEventListener(closeBtn, 'click', function (fid) {
-        return function (e) {
-          e.stopPropagation();
-          closeFile(fid);
-        };
-      }(fileId));
+      var closeBtn = tab.querySelector(".fe-tab-close");
+      addEventListener(
+        closeBtn,
+        "click",
+        (function (fid) {
+          return function (e) {
+            e.stopPropagation();
+            closeFile(fid);
+          };
+        })(fileId),
+      );
     }
   }
 
@@ -526,17 +678,19 @@
     if (activeFileId === fileId) return;
 
     activeFileId = fileId;
-    var file = openFiles.find(function (f) { return f.id === fileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === fileId;
+    });
 
     if (!file) {
-      els.editorArea.style.display = 'none';
-      els.empty.style.display = 'flex';
+      els.editorArea.style.display = "none";
+      els.empty.style.display = "flex";
       return;
     }
 
     // Update editor
-    els.empty.style.display = 'none';
-    els.editorArea.style.display = 'block';
+    els.empty.style.display = "none";
+    els.editorArea.style.display = "block";
 
     if (editor) {
       var model = editor.getModel();
@@ -567,15 +721,19 @@
   }
 
   function updateTabModified(fileId, modified) {
-    var file = openFiles.find(function (f) { return f.id === fileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === fileId;
+    });
     if (file) {
       file.modified = modified;
-      var tab = els.tabsScroll.querySelector('.fe-tab[data-file-id="' + fileId + '"]');
+      var tab = els.tabsScroll.querySelector(
+        '.fe-tab[data-file-id="' + fileId + '"]',
+      );
       if (tab) {
         if (modified) {
-          tab.classList.add('modified');
+          tab.classList.add("modified");
         } else {
-          tab.classList.remove('modified');
+          tab.classList.remove("modified");
         }
       }
     }
@@ -586,7 +744,9 @@
   function onContentChanged() {
     if (!activeFileId) return;
 
-    var file = openFiles.find(function (f) { return f.id === activeFileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === activeFileId;
+    });
     if (!file) return;
 
     var currentContent = editor.getValue();
@@ -602,7 +762,9 @@
     if (!activeFileId) return;
 
     var newLanguage = els.languageSelect.value;
-    var file = openFiles.find(function (f) { return f.id === activeFileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === activeFileId;
+    });
 
     if (file && file.language !== newLanguage) {
       file.language = newLanguage;
@@ -616,7 +778,8 @@
 
   function updateCursorPosition(position) {
     if (els.statusPosition) {
-      els.statusPosition.textContent = 'Ln ' + position.lineNumber + ', Col ' + position.column;
+      els.statusPosition.textContent =
+        "Ln " + position.lineNumber + ", Col " + position.column;
     }
   }
 
@@ -624,19 +787,22 @@
 
   function updateStatusBar() {
     if (!activeFileId) {
-      els.statusFile.textContent = 'No file open';
-      els.statusModified.textContent = '';
-      els.statusSource.textContent = '—';
-      els.statusLang.textContent = 'Plain Text';
+      els.statusFile.textContent = "No file open";
+      els.statusModified.textContent = "";
+      els.statusSource.textContent = "—";
+      els.statusLang.textContent = "Plain Text";
       return;
     }
 
-    var file = openFiles.find(function (f) { return f.id === activeFileId; });
+    var file = openFiles.find(function (f) {
+      return f.id === activeFileId;
+    });
     if (!file) return;
 
     els.statusFile.textContent = file.name;
-    els.statusModified.textContent = file.modified ? '● Modified' : '';
-    els.statusSource.textContent = file.source === SOURCE_LOCAL ? 'Local' : 'Remote';
+    els.statusModified.textContent = file.modified ? "● Modified" : "";
+    els.statusSource.textContent =
+      file.source === SOURCE_LOCAL ? "Local" : "Remote";
     els.statusLang.textContent = getLanguageDisplayName(file.language);
   }
 
@@ -644,12 +810,12 @@
 
   function detectLanguage(filePath) {
     var ext = getFileExtension(filePath);
-    return LANGUAGE_MAP[ext] || 'plaintext';
+    return LANGUAGE_MAP[ext] || "plaintext";
   }
 
   function getFileExtension(filePath) {
-    var parts = filePath.split('.');
-    if (parts.length < 2) return '';
+    var parts = filePath.split(".");
+    if (parts.length < 2) return "";
     return parts[parts.length - 1].toLowerCase();
   }
 
@@ -659,46 +825,49 @@
   }
 
   function generateFileId() {
-    return 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+    return "file_" + Date.now() + "_" + Math.random().toString(36).substr(2, 9);
   }
 
   function getLanguageDisplayName(lang) {
     var names = {
-      'plaintext': 'Plain Text',
-      'javascript': 'JavaScript',
-      'typescript': 'TypeScript',
-      'python': 'Python',
-      'css': 'CSS',
-      'html': 'HTML',
-      'json': 'JSON',
-      'markdown': 'Markdown',
-      'xml': 'XML',
-      'yaml': 'YAML',
-      'shell': 'Shell',
-      'sql': 'SQL',
-      'c': 'C',
-      'cpp': 'C++',
-      'csharp': 'C#',
-      'go': 'Go',
-      'rust': 'Rust',
-      'java': 'Java',
-      'php': 'PHP',
-      'ruby': 'Ruby',
-      'lua': 'Lua',
-      'dockerfile': 'Dockerfile',
-      'ini': 'INI'
+      plaintext: "Plain Text",
+      javascript: "JavaScript",
+      typescript: "TypeScript",
+      python: "Python",
+      css: "CSS",
+      html: "HTML",
+      json: "JSON",
+      markdown: "Markdown",
+      xml: "XML",
+      yaml: "YAML",
+      shell: "Shell",
+      sql: "SQL",
+      c: "C",
+      cpp: "C++",
+      csharp: "C#",
+      go: "Go",
+      rust: "Rust",
+      java: "Java",
+      php: "PHP",
+      ruby: "Ruby",
+      lua: "Lua",
+      dockerfile: "Dockerfile",
+      ini: "INI",
     };
     return names[lang] || lang;
   }
 
   function escapeHtml(str) {
-    if (!str) return '';
-    return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    if (!str) return "";
+    return str
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
   }
 
   function showError(message) {
     var toast = api.ui.toast();
-    toast.show(message, 'error');
+    toast.show(message, "error");
   }
-
 })();

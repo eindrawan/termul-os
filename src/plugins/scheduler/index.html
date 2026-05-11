@@ -1,17 +1,18 @@
 <div class="scheduler-container">
-  <div class="tui-toolbar">
-    <div class="tui-toolbar-left">
-      <span class="tui-toolbar-title" style="font-size:16px;font-weight:600">Crontab Scheduler</span>
+  <div class="scheduler-toolbar">
+    <div class="scheduler-toolbar-left">
+      <svg class="scheduler-toolbar-icon" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+        <circle cx="12" cy="12" r="10"/>
+        <polyline points="12 6 12 12 16 14"/>
+      </svg>
+      <span class="scheduler-toolbar-title">Task Scheduler</span>
     </div>
-    <div class="tui-toolbar-right" id="toolbar-actions">
-      <select class="tui-select tui-select-sm" id="crontab-mode">
-        <option value="user">User Crontab</option>
-        <option value="root">Root Crontab</option>
-      </select>
+    <div class="scheduler-toolbar-right" id="toolbar-actions">
+      <span id="crontab-mode"></span>
     </div>
   </div>
 
-  <div class="scheduler-content tui-scrollbar" id="scheduler-content">
+  <div class="scheduler-body tui-scrollbar" id="scheduler-content">
     <!-- Empty state shown initially -->
     <div class="tui-empty" id="empty-state">
       <div class="tui-empty-icon">
@@ -20,7 +21,8 @@
           <polyline points="12 6 12 12 16 14"/>
         </svg>
       </div>
-      <p class="tui-empty-text">No crontab entries found</p>
+      <p class="tui-empty-text">No scheduled tasks found</p>
+      <p class="tui-empty-subtext">Click "Add Entry" in the toolbar to create a new crontab task</p>
     </div>
 
     <!-- Crontab list container -->
@@ -41,36 +43,39 @@
       </div>
 
       <div class="cron-form-body">
-        <div class="cron-schedule-grid">
-          <div class="cron-field">
-            <label class="cron-field-label">Minute</label>
-            <input class="tui-input cron-field-input" id="cron-minute" type="text" placeholder="*" />
-            <span class="cron-field-hint">0-59</span>
-          </div>
-          <div class="cron-field">
-            <label class="cron-field-label">Hour</label>
-            <input class="tui-input cron-field-input" id="cron-hour" type="text" placeholder="*" />
-            <span class="cron-field-hint">0-23</span>
-          </div>
-          <div class="cron-field">
-            <label class="cron-field-label">Day</label>
-            <input class="tui-input cron-field-input" id="cron-dom" type="text" placeholder="*" />
-            <span class="cron-field-hint">1-31</span>
-          </div>
-          <div class="cron-field">
-            <label class="cron-field-label">Month</label>
-            <input class="tui-input cron-field-input" id="cron-month" type="text" placeholder="*" />
-            <span class="cron-field-hint">1-12</span>
-          </div>
-          <div class="cron-field">
-            <label class="cron-field-label">Weekday</label>
-            <input class="tui-input cron-field-input" id="cron-dow" type="text" placeholder="*" />
-            <span class="cron-field-hint">0-6</span>
+        <div class="cron-form-section">
+          <span class="cron-form-section-label">Schedule</span>
+          <div class="cron-schedule-grid">
+            <div class="cron-field">
+              <label class="cron-field-label">Minute</label>
+              <input class="tui-input cron-field-input" id="cron-minute" type="text" placeholder="*" />
+              <span class="cron-field-hint">0-59</span>
+            </div>
+            <div class="cron-field">
+              <label class="cron-field-label">Hour</label>
+              <input class="tui-input cron-field-input" id="cron-hour" type="text" placeholder="*" />
+              <span class="cron-field-hint">0-23</span>
+            </div>
+            <div class="cron-field">
+              <label class="cron-field-label">Day</label>
+              <input class="tui-input cron-field-input" id="cron-dom" type="text" placeholder="*" />
+              <span class="cron-field-hint">1-31</span>
+            </div>
+            <div class="cron-field">
+              <label class="cron-field-label">Month</label>
+              <input class="tui-input cron-field-input" id="cron-month" type="text" placeholder="*" />
+              <span class="cron-field-hint">1-12</span>
+            </div>
+            <div class="cron-field">
+              <label class="cron-field-label">Weekday</label>
+              <input class="tui-input cron-field-input" id="cron-dow" type="text" placeholder="*" />
+              <span class="cron-field-hint">0-6</span>
+            </div>
           </div>
         </div>
 
-        <div class="cron-field-full">
-          <label class="cron-field-label">Command</label>
+        <div class="cron-form-section">
+          <span class="cron-form-section-label">Command</span>
           <input class="tui-input" id="cron-command" type="text" placeholder="/path/to/command arg1 arg2" />
         </div>
 

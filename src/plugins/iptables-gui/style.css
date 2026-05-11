@@ -1,0 +1,835 @@
+/* iptables GUI Plugin Styles */
+
+:host {
+  overflow: hidden;
+}
+
+.ipt-container {
+  width: 100%;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  background: var(--tui-bg-surface, #0f0f0f);
+  color: var(--tui-text-primary, #e0e0e0);
+  font-family: var(--tui-font-family, 'Segoe UI', sans-serif);
+  position: relative;
+  overflow: hidden;
+}
+
+/* ─── Toolbar ──────────────────────────────────────────── */
+.ipt-container > .tui-toolbar {
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.92));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+}
+
+.ipt-logo {
+  flex-shrink: 0;
+}
+
+/* ─── Table Tabs ───────────────────────────────────────── */
+.ipt-tabs {
+  display: flex;
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.92));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  padding: 0 8px;
+  gap: 2px;
+  flex-shrink: 0;
+  overflow-x: auto;
+}
+
+.ipt-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 8px 16px;
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  background: transparent;
+  border: none;
+  border-bottom: 2px solid transparent;
+  cursor: pointer;
+  transition: all var(--tui-transition-fast, 150ms ease);
+  white-space: nowrap;
+  font-family: inherit;
+}
+
+.ipt-tab:hover {
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.07));
+}
+
+.ipt-tab.active {
+  color: #FF6B35;
+  border-bottom-color: #FF6B35;
+}
+
+.ipt-tab svg {
+  flex-shrink: 0;
+}
+
+/* ─── Chain Bar ────────────────────────────────────────── */
+.ipt-chain-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--tui-bg-elevated, rgba(20, 20, 20, 0.8));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  padding: 0 12px;
+  flex-shrink: 0;
+  min-height: 38px;
+  gap: 8px;
+}
+
+.ipt-chain-tabs {
+  display: flex;
+  gap: 2px;
+  overflow-x: auto;
+}
+
+.ipt-chain-tab {
+  padding: 6px 14px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--tui-radius-sm, 6px);
+  cursor: pointer;
+  transition: all var(--tui-transition-fast, 150ms ease);
+  white-space: nowrap;
+  font-family: var(--tui-font-mono, monospace);
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ipt-chain-tab:hover {
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.07));
+}
+
+.ipt-chain-tab.active {
+  color: #FF6B35;
+  background: rgba(255, 107, 53, 0.1);
+  border-color: rgba(255, 107, 53, 0.3);
+}
+
+.ipt-chain-policy {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  flex-shrink: 0;
+}
+
+.ipt-policy-label {
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.6));
+}
+
+.ipt-policy-value {
+  font-weight: 600;
+  font-family: var(--tui-font-mono, monospace);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  text-transform: uppercase;
+}
+
+.ipt-policy-value.accept {
+  color: #00b294;
+  background: rgba(0, 178, 148, 0.12);
+}
+
+.ipt-policy-value.drop {
+  color: #ff6b6b;
+  background: rgba(232, 17, 35, 0.12);
+}
+
+.ipt-policy-value.queue {
+  color: #60cdff;
+  background: rgba(96, 205, 255, 0.12);
+}
+
+.ipt-policy-value.return {
+  color: #f2c94c;
+  background: rgba(242, 201, 76, 0.12);
+}
+
+.ipt-policy-toggle {
+  width: 20px;
+  height: 20px;
+  border: none;
+  background: var(--tui-bg-glass, rgba(60, 60, 60, 0.35));
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  cursor: pointer;
+  border-radius: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--tui-transition-fast, 150ms ease);
+}
+
+.ipt-policy-toggle:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.15));
+  color: var(--tui-text-primary, #fff);
+}
+
+/* ─── Content Area ─────────────────────────────────────── */
+.ipt-content {
+  flex: 1;
+  overflow: hidden;
+  position: relative;
+}
+
+.ipt-panel {
+  display: none;
+  flex-direction: column;
+  height: 100%;
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+}
+
+.ipt-panel.active {
+  display: flex;
+}
+
+/* ─── Panel Toolbar ────────────────────────────────────── */
+.ipt-panel-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.5));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+  gap: 8px;
+}
+
+.ipt-panel-toolbar-left,
+.ipt-panel-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.ipt-count {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+}
+
+/* ─── Rules List Header ────────────────────────────────── */
+.ipt-list-header {
+  display: flex;
+  align-items: center;
+  padding: 6px 12px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.ipt-list-header span {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.ipt-list-header .col-num { width: 30px; flex-shrink: 0; text-align: center; }
+.ipt-list-header .col-target { width: 90px; flex-shrink: 0; }
+.ipt-list-header .col-proto { width: 60px; flex-shrink: 0; }
+.ipt-list-header .col-source { width: 160px; flex-shrink: 0; }
+.ipt-list-header .col-destination { width: 160px; flex-shrink: 0; }
+.ipt-list-header .col-options { flex: 1; min-width: 0; }
+.ipt-list-header .col-actions { width: 140px; flex-shrink: 0; text-align: right; }
+
+/* ─── Rules List ───────────────────────────────────────── */
+.ipt-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+/* ─── Rule Row ─────────────────────────────────────────── */
+.ipt-row {
+  display: flex;
+  align-items: center;
+  padding: 7px 12px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.04));
+  cursor: pointer;
+  transition: background var(--tui-transition-fast, 150ms ease);
+  gap: 8px;
+  min-height: 40px;
+}
+
+.ipt-row:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.07));
+}
+
+.ipt-row:active {
+  background: var(--tui-bg-active, rgba(255, 255, 255, 0.1));
+}
+
+.ipt-row-num {
+  width: 30px;
+  flex-shrink: 0;
+  text-align: center;
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.35));
+  font-family: var(--tui-font-mono, monospace);
+}
+
+.ipt-row-target {
+  width: 90px;
+  flex-shrink: 0;
+}
+
+.ipt-row-target .ipt-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+}
+
+.ipt-badge-accept {
+  background: rgba(0, 178, 148, 0.15);
+  color: #00b294;
+}
+
+.ipt-badge-drop {
+  background: rgba(232, 17, 35, 0.15);
+  color: #ff6b6b;
+}
+
+.ipt-badge-reject {
+  background: rgba(232, 17, 35, 0.2);
+  color: #ff6b6b;
+}
+
+.ipt-badge-masquerade {
+  background: rgba(96, 205, 255, 0.15);
+  color: #60cdff;
+}
+
+.ipt-badge-dnat {
+  background: rgba(96, 205, 255, 0.15);
+  color: #60cdff;
+}
+
+.ipt-badge-snat {
+  background: rgba(96, 205, 255, 0.15);
+  color: #60cdff;
+}
+
+.ipt-badge-return {
+  background: rgba(242, 201, 76, 0.15);
+  color: #f2c94c;
+}
+
+.ipt-badge-log {
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.ipt-badge-custom {
+  background: rgba(255, 107, 53, 0.15);
+  color: #FF6B35;
+}
+
+.ipt-row-proto {
+  width: 60px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  font-family: var(--tui-font-mono, monospace);
+}
+
+.ipt-row-source,
+.ipt-row-dest {
+  width: 160px;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.6));
+  font-family: var(--tui-font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ipt-row-options {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  font-family: var(--tui-font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ipt-row-actions {
+  width: 140px;
+  flex-shrink: 0;
+  display: flex;
+  gap: 4px;
+  justify-content: flex-end;
+  opacity: 0;
+  transition: opacity var(--tui-transition-fast, 150ms ease);
+}
+
+.ipt-row:hover .ipt-row-actions {
+  opacity: 1;
+}
+
+.ipt-action-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--tui-radius-sm, 4px);
+  border: none;
+  background: var(--tui-bg-glass, rgba(60, 60, 60, 0.35));
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all var(--tui-transition-fast, 150ms ease);
+}
+
+.ipt-action-btn:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.15));
+  color: var(--tui-text-primary, #fff);
+}
+
+.ipt-action-btn.danger:hover {
+  background: rgba(232, 17, 35, 0.25);
+  color: var(--tui-error-text, #ff6b6b);
+}
+
+.ipt-action-btn.move:hover {
+  background: rgba(96, 205, 255, 0.15);
+  color: #60cdff;
+}
+
+/* ─── Empty State ──────────────────────────────────────── */
+.ipt-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+  gap: 8px;
+}
+
+.ipt-empty-icon {
+  opacity: 0.5;
+  margin-bottom: 8px;
+}
+
+.ipt-empty-text {
+  font-size: 14px;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  margin: 0;
+}
+
+.ipt-empty-subtext {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  margin: 0;
+}
+
+/* ─── Detail Panel (slide-in from right) ───────────────── */
+.ipt-detail {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 420px;
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.96));
+  border-left: 1px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  z-index: 10;
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--tui-shadow-lg, -4px 0 24px rgba(0, 0, 0, 0.35));
+  animation: iptSlideInRight 200ms ease;
+}
+
+.ipt-detail.open {
+  display: flex;
+}
+
+@keyframes iptSlideInRight {
+  from { transform: translateX(100%); opacity: 0; }
+  to { transform: translateX(0); opacity: 1; }
+}
+
+.ipt-detail-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 16px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+}
+
+.ipt-detail-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tui-text-primary, #fff);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.ipt-detail-title span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ipt-detail-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+}
+
+.ipt-detail-section {
+  margin-bottom: 20px;
+}
+
+.ipt-detail-section-title {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #FF6B35;
+  margin-bottom: 8px;
+}
+
+.ipt-detail-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 6px 0;
+  gap: 12px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.03));
+}
+
+.ipt-detail-label {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  flex-shrink: 0;
+  min-width: 90px;
+}
+
+.ipt-detail-value {
+  font-size: 12px;
+  color: var(--tui-text-primary, #fff);
+  text-align: right;
+  word-break: break-all;
+  font-family: var(--tui-font-mono, monospace);
+}
+
+/* ─── Modal ────────────────────────────────────────────── */
+.ipt-modal-overlay {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  z-index: 20;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  animation: iptFadeIn 150ms ease;
+}
+
+@keyframes iptFadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.ipt-modal {
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.96));
+  border: 1px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  border-radius: var(--tui-radius-lg, 12px);
+  width: 520px;
+  max-height: 85%;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--tui-shadow-lg, 0 4px 24px rgba(0, 0, 0, 0.35));
+}
+
+.ipt-modal-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.ipt-modal-title {
+  font-size: 15px;
+  font-weight: 600;
+}
+
+.ipt-modal-body {
+  padding: 16px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.ipt-modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  padding: 12px 16px;
+  border-top: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+/* ─── Form Fields ──────────────────────────────────────── */
+.ipt-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.ipt-form-label {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+}
+
+.ipt-form-row {
+  display: flex;
+  gap: 8px;
+}
+
+.ipt-form-row .ipt-form-group {
+  flex: 1;
+}
+
+.ipt-form-input {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: var(--tui-font-mono, monospace);
+  background: var(--tui-bg-surface, #0f0f0f);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.1));
+  border-radius: var(--tui-radius-sm, 6px);
+  color: var(--tui-text-primary, #e0e0e0);
+  outline: none;
+  transition: border-color var(--tui-transition-fast, 150ms ease);
+  box-sizing: border-box;
+}
+
+.ipt-form-input:focus {
+  border-color: #FF6B35;
+}
+
+.ipt-form-input::placeholder {
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.3));
+}
+
+.ipt-form-input.mono {
+  font-family: var(--tui-font-mono, monospace);
+}
+
+.ipt-form-select {
+  width: 100%;
+  padding: 8px 10px;
+  font-size: 12px;
+  font-family: inherit;
+  background: var(--tui-bg-surface, #0f0f0f);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.1));
+  border-radius: var(--tui-radius-sm, 6px);
+  color: var(--tui-text-primary, #e0e0e0);
+  outline: none;
+  cursor: pointer;
+  box-sizing: border-box;
+}
+
+.ipt-form-select:focus {
+  border-color: #FF6B35;
+}
+
+.ipt-form-hint {
+  font-size: 10px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.35));
+  margin-top: 2px;
+}
+
+.ipt-form-separator {
+  border: none;
+  border-top: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  margin: 4px 0;
+}
+
+.ipt-form-section-label {
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: #FF6B35;
+  margin-top: 4px;
+}
+
+/* ─── Output Panel (bottom) ────────────────────────────── */
+.ipt-output-panel {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 180px;
+  background: var(--tui-bg-surface, #0f0f0f);
+  border-top: 1px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  z-index: 11;
+  display: flex;
+  flex-direction: column;
+  box-shadow: var(--tui-shadow-lg, 0 -4px 24px rgba(0, 0, 0, 0.35));
+  animation: iptSlideInUp 200ms ease;
+}
+
+@keyframes iptSlideInUp {
+  from { transform: translateY(100%); opacity: 0; }
+  to { transform: translateY(0); opacity: 1; }
+}
+
+.ipt-output-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.92));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+}
+
+.ipt-output-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.ipt-output-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.ipt-output-body {
+  flex: 1;
+  overflow-y: auto;
+  background: #0a0a0a;
+}
+
+.ipt-output-body pre {
+  margin: 0;
+  padding: 12px;
+  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+  font-size: 12px;
+  line-height: 1.5;
+  color: #cccccc;
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+/* ─── Loading Spinner ──────────────────────────────────── */
+.ipt-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  gap: 8px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  font-size: 13px;
+}
+
+.ipt-spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  border-top-color: #FF6B35;
+  border-radius: 50%;
+  animation: iptSpin 0.8s linear infinite;
+}
+
+@keyframes iptSpin {
+  to { transform: rotate(360deg); }
+}
+
+/* ─── Rule Row Transitioning ───────────────────────────── */
+.ipt-row.transitioning {
+  opacity: 0.6;
+  pointer-events: none;
+  position: relative;
+}
+
+.ipt-row.transitioning::after {
+  content: '';
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: #FF6B35;
+  animation: iptProgressSlide 1.5s ease-in-out infinite;
+  border-radius: 1px;
+}
+
+@keyframes iptProgressSlide {
+  0% { width: 0; left: 0; }
+  50% { width: 60%; left: 20%; }
+  100% { width: 0; left: 100%; }
+}
+
+/* ─── Scrollbar ────────────────────────────────────────── */
+.ipt-container ::-webkit-scrollbar {
+  width: 6px;
+}
+
+.ipt-container ::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.ipt-container ::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.12);
+  border-radius: 3px;
+}
+
+.ipt-container ::-webkit-scrollbar-thumb:hover {
+  background: rgba(255, 255, 255, 0.2);
+}
+
+/* ─── Responsive ───────────────────────────────────────── */
+@media (max-width: 700px) {
+  .ipt-detail {
+    width: 100%;
+  }
+
+  .ipt-row-options,
+  .ipt-list-header .col-options {
+    display: none;
+  }
+
+  .ipt-list-header .col-source,
+  .ipt-list-header .col-destination,
+  .ipt-row-source,
+  .ipt-row-dest {
+    width: 120px;
+  }
+}

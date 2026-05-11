@@ -40,6 +40,7 @@ protocol.registerSchemesAsPrivileged([{
 // ─── State ───────────────────────────────────────────────────────────
 let mainWindow = null;
 let sshConnections = new Map();
+let sftpChannels = new Map(); // connId → { sftp, ready: boolean, error: Error|null }
 let ftpConnections = new Map(); // connId → { client, profile }
 let isManuallyMaximized = false;
 let preMaximizeBounds = null;
@@ -47,6 +48,74 @@ let preMaximizeBounds = null;
 // ─── Port Forwarding State ─────────────────────────────────────────────
 let activeTunnels = new Map(); // ruleId → { server, sockets, rule, connectionId }
 let tunnelRules = [];          // Persisted rules array
+
+// ─── SFTP Channel Management ───────────────────────────────────────────
+/**
+ * Get or create an SFTP channel for the given connection.
+ * Reuses existing channels to avoid "Channel open failure" errors.
+ * Uses setImmediate to avoid blocking the main thread.
+ */
+async function getSftpChannel(connectionId) {
+  const conn = sshConnections.get(connectionId);
+  if (!conn) {
+    throw new Error('No active SSH connection');
+  }
+
+  // Check if we already have a ready SFTP channel
+  const existing = sftpChannels.get(connectionId);
+  if (existing && existing.ready && existing.sftp) {
+    return existing.sftp;
+  }
+
+  // Create a new SFTP channel
+  return new Promise((resolve, reject) => {
+    conn.sftp((err, sftp) => {
+      if (err) {
+        // Store the error so we don't keep retrying
+        sftpChannels.set(connectionId, { sftp: null, ready: false, error: err });
+        reject(err);
+        return;
+      }
+
+      // Store the successful channel
+      sftpChannels.set(connectionId, { sftp, ready: true, error: null });
+
+      // Handle SFTP errors - mark as not ready
+      sftp.on('error', (err) => {
+        console.error(`[SFTP] Channel error for ${connectionId}:`, err.message);
+        const current = sftpChannels.get(connectionId);
+        if (current) {
+          current.ready = false;
+          current.error = err;
+        }
+      });
+
+      // Handle SFTP close
+      sftp.on('close', () => {
+        console.log(`[SFTP] Channel closed for ${connectionId}`);
+        sftpChannels.delete(connectionId);
+      });
+
+      resolve(sftp);
+    });
+  });
+}
+
+/**
+ * Close an SFTP channel for the given connection.
+ */
+function closeSftpChannel(connectionId) {
+  const channel = sftpChannels.get(connectionId);
+  if (channel && channel.sftp) {
+    try {
+      channel.sftp.end();
+      console.log(`[SFTP] Closed channel for ${connectionId}`);
+    } catch (e) {
+      // Ignore errors during close
+    }
+    sftpChannels.delete(connectionId);
+  }
+}
 
 // ─── Helpers ─────────────────────────────────────────────────────────
 
@@ -321,6 +390,11 @@ function createMainWindow() {
       if (conn && conn.end) conn.end();
     }
     sshConnections.clear();
+    // Close all SFTP channels
+    for (const [id] of sftpChannels) {
+      closeSftpChannel(id);
+    }
+    sftpChannels.clear();
     // Close all FTP connections
     for (const [id, entry] of ftpConnections) {
       try { entry.client.close(); } catch (e) { /* ignore */ }
@@ -521,6 +595,9 @@ ipcMain.handle('ssh:connect', (event, profile) => {
       // If the connection was already established, this is a runtime error
       // (e.g. connection lost). Notify the renderer.
       if (sshConnections.has(connId)) {
+        // Close SFTP channel for this connection
+        closeSftpChannel(connId);
+
         if (mainWindow && !mainWindow.isDestroyed()) {
           mainWindow.webContents.send('ssh:connection-error', {
             connectionId: connId,
@@ -536,6 +613,9 @@ ipcMain.handle('ssh:connect', (event, profile) => {
     conn.on('close', () => {
       const wasConnected = sshConnections.has(connId);
       sshConnections.delete(connId);
+
+      // Close SFTP channel for this connection
+      closeSftpChannel(connId);
 
       // Stop any tunnels using this connection
       stopAllTunnelsForConnection(connId);
@@ -557,6 +637,8 @@ ipcMain.handle('ssh:disconnect', (event, connectionId) => {
   if (conn) {
     conn.end();
     sshConnections.delete(connectionId);
+    // Close SFTP channel for this connection
+    closeSftpChannel(connectionId);
     return true;
   }
   return false;
@@ -870,81 +952,153 @@ ipcMain.handle('ui:getSharedCSS', () => {
  * List remote directory via SFTP.
  * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
  */
-ipcMain.handle('ssh:sftpListDir', (event, connectionId, remotePath) => {
+ipcMain.handle('ssh:sftpListDir', async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
+  const maxRetries = 3;
+  const baseDelay = 300;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.readdir(remotePath, (err, list) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+            return;
+          }
+
+          const entries = list.map(item => ({
+            name: item.filename,
+            size: item.attrs.size || 0,
+            modifyTime: item.attrs.mtime ? item.attrs.mtime * 1000 : null,
+            isDirectory: (item.attrs.mode & 0o40000) !== 0,
+            isFile: (item.attrs.mode & 0o100000) !== 0,
+            isSymlink: (item.attrs.mode & 0o120000) !== 0,
+            path: remotePath === '/' ? '/' + item.filename : remotePath + '/' + item.filename,
+          }));
+
+          // Sort: directories first, then alphabetical
+          entries.sort((a, b) => {
+            if (a.isDirectory && !b.isDirectory) return -1;
+            if (!a.isDirectory && b.isDirectory) return 1;
+            return a.name.localeCompare(b.name);
+          });
+
+          resolve({ success: true, entries });
+        });
+      });
+
+      if (result.success) return result;
+
+      // Check if channel-related error → retry
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        console.log(`[SFTP:ListDir] Channel error on attempt ${attempt + 1}/${maxRetries + 1}, retrying...`);
+        continue;
       }
 
-      sftp.readdir(remotePath, (err, list) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-          return;
-        }
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        console.log(`[SFTP:ListDir] Channel exception on attempt ${attempt + 1}/${maxRetries + 1}, retrying...`);
+        continue;
+      }
+      return { success: false, error: err.message };
+    }
+  }
 
-        const entries = list.map(item => ({
-          name: item.filename,
-          size: item.attrs.size || 0,
-          modifyTime: item.attrs.mtime ? item.attrs.mtime * 1000 : null,
-          isDirectory: (item.attrs.mode & 0o40000) !== 0,
-          isFile: (item.attrs.mode & 0o100000) !== 0,
-          isSymlink: (item.attrs.mode & 0o120000) !== 0,
-          path: remotePath === '/' ? '/' + item.filename : remotePath + '/' + item.filename,
-        }));
-
-        // Sort: directories first, then alphabetical
-        entries.sort((a, b) => {
-          if (a.isDirectory && !b.isDirectory) return -1;
-          if (!a.isDirectory && b.isDirectory) return 1;
-          return a.name.localeCompare(b.name);
-        });
-
-        resolve({ success: true, entries });
-      });
-    });
-  });
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Get remote file/directory stats via SFTP.
  */
-ipcMain.handle('ssh:sftpStat', (event, connectionId, remotePath) => {
+ipcMain.handle('ssh:sftpStat', async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
-      }
-      sftp.stat(remotePath, (err, stats) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-          return;
-        }
-        resolve({
-          success: true,
-          stat: {
-            size: stats.size || 0,
-            modifyTime: stats.mtime ? stats.mtime * 1000 : null,
-            isDirectory: stats.isDirectory(),
-            isFile: stats.isFile(),
+  const maxRetries = 3;
+  const baseDelay = 300;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.stat(remotePath, (err, stats) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+            return;
           }
+          resolve({
+            success: true,
+            stat: {
+              size: stats.size || 0,
+              modifyTime: stats.mtime ? stats.mtime * 1000 : null,
+              isDirectory: stats.isDirectory(),
+              isFile: stats.isFile(),
+            }
+          });
         });
       });
-    });
-  });
+
+      if (result.success) return result;
+
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Download a remote file to a local path via SFTP.
  * Reports progress via IPC events.
+ * Now uses a reusable SFTP channel.
  */
 ipcMain.handle('ssh:sftpDownload', (event, connectionId, remotePath, localPath, transferId) => {
   const conn = sshConnections.get(connectionId);
@@ -952,60 +1106,110 @@ ipcMain.handle('ssh:sftpDownload', (event, connectionId, remotePath, localPath, 
 
   return new Promise((resolve) => {
     let resolved = false;
-    conn.sftp((err, sftp) => {
-      if (err) {
-        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
-        return;
-      }
+    let retryCount = 0;
+    const maxRetries = 3;
 
-      // Get remote file size first for progress
-      sftp.stat(remotePath, (statErr, stats) => {
-        if (statErr) {
-          if (!resolved) { resolved = true; resolve({ success: false, error: statErr.message }); }
+    const attemptDownload = async () => {
+      try {
+        // Get or create SFTP channel (now reused!)
+        const sftp = await getSftpChannel(connectionId);
+
+        // Get remote file size first for progress
+        sftp.stat(remotePath, (statErr, stats) => {
+          if (statErr) {
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: false, error: statErr.message });
+            }
+            return;
+          }
+
+          const totalSize = stats.size;
+          let transferred = 0;
+
+          // Use smaller buffer sizes to prevent blocking
+          const readStream = sftp.createReadStream(remotePath, { highWaterMark: 64 * 1024 }); // 64KB buffer
+          const writeStream = fs.createWriteStream(localPath, { highWaterMark: 64 * 1024 }); // 64KB buffer
+
+          // Throttle progress updates to avoid blocking the main thread
+          let lastProgressUpdate = 0;
+          const progressThrottleMs = 100; // Update progress every 100ms max
+
+          readStream.on('data', (chunk) => {
+            transferred += chunk.length;
+            const now = Date.now();
+            if (now - lastProgressUpdate >= progressThrottleMs || transferred === totalSize) {
+              lastProgressUpdate = now;
+              if (mainWindow && !mainWindow.isDestroyed()) {
+                mainWindow.webContents.send('ssh:sftp-progress', {
+                  transferId,
+                  transferred,
+                  total: totalSize,
+                  percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
+                });
+              }
+            }
+          });
+
+          readStream.on('error', (err) => {
+            writeStream.destroy();
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: false, error: err.message });
+            }
+          });
+
+          writeStream.on('error', (err) => {
+            readStream.destroy();
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: false, error: err.message });
+            }
+          });
+
+          writeStream.on('finish', () => {
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true, transferred });
+            }
+          });
+
+          readStream.pipe(writeStream);
+        });
+
+      } catch (err) {
+        // Check if this is a channel error that might be transient
+        const isChannelError = err.code === 'ECONNRESET' ||
+                              err.message.includes('Channel open') ||
+                              err.message.includes('open failed');
+
+        if (isChannelError && retryCount < maxRetries) {
+          retryCount++;
+          // Close the bad channel and retry
+          closeSftpChannel(connectionId);
+
+          const delay = 500 * Math.pow(2, retryCount - 1);
+          console.log(`[SSH] Download channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          setTimeout(attemptDownload, delay);
           return;
         }
 
-        const totalSize = stats.size;
-        let transferred = 0;
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: err.message });
+        }
+      }
+    };
 
-        const readStream = sftp.createReadStream(remotePath);
-        const writeStream = fs.createWriteStream(localPath);
-
-        readStream.on('data', (chunk) => {
-          transferred += chunk.length;
-          if (mainWindow && !mainWindow.isDestroyed()) {
-            mainWindow.webContents.send('ssh:sftp-progress', {
-              transferId,
-              transferred,
-              total: totalSize,
-              percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
-            });
-          }
-        });
-
-        readStream.on('error', (err) => {
-          writeStream.destroy();
-          if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
-        });
-
-        writeStream.on('error', (err) => {
-          readStream.destroy();
-          if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
-        });
-
-        writeStream.on('finish', () => {
-          if (!resolved) { resolved = true; resolve({ success: true, transferred }); }
-        });
-
-        readStream.pipe(writeStream);
-      });
-    });
+    // Start the first attempt
+    attemptDownload();
   });
 });
 
 /**
  * Upload a local file to a remote path via SFTP.
  * Reports progress via IPC events.
+ * Now uses a reusable SFTP channel.
  */
 ipcMain.handle('ssh:sftpUpload', (event, connectionId, localPath, remotePath, transferId) => {
   const conn = sshConnections.get(connectionId);
@@ -1017,204 +1221,508 @@ ipcMain.handle('ssh:sftpUpload', (event, connectionId, localPath, remotePath, tr
 
   return new Promise((resolve) => {
     let resolved = false;
+    let retryCount = 0;
+    const maxRetries = 3;
     const totalSize = fs.statSync(localPath).size;
     let transferred = 0;
 
-    conn.sftp((err, sftp) => {
-      if (err) {
-        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
-        return;
-      }
+    const attemptUpload = async () => {
+      try {
+        // Get or create SFTP channel (now reused!)
+        const sftp = await getSftpChannel(connectionId);
 
-      const readStream = fs.createReadStream(localPath);
-      const writeStream = sftp.createWriteStream(remotePath);
+        // Use smaller buffer sizes to prevent blocking
+        const readStream = fs.createReadStream(localPath, { highWaterMark: 64 * 1024 }); // 64KB buffer
+        const writeStream = sftp.createWriteStream(remotePath, { highWaterMark: 64 * 1024 }); // 64KB buffer
 
-      readStream.on('data', (chunk) => {
-        transferred += chunk.length;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:sftp-progress', {
-            transferId,
-            transferred,
-            total: totalSize,
-            percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
-          });
+        // Throttle progress updates to avoid blocking the main thread
+        let lastProgressUpdate = 0;
+        const progressThrottleMs = 100; // Update progress every 100ms max
+
+        readStream.on('data', (chunk) => {
+          transferred += chunk.length;
+          const now = Date.now();
+          if (now - lastProgressUpdate >= progressThrottleMs || transferred === totalSize) {
+            lastProgressUpdate = now;
+            if (mainWindow && !mainWindow.isDestroyed()) {
+              mainWindow.webContents.send('ssh:sftp-progress', {
+                transferId,
+                transferred,
+                total: totalSize,
+                percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
+              });
+            }
+          }
+        });
+
+        readStream.on('error', (err) => {
+          writeStream.end();
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: err.message });
+          }
+        });
+
+        writeStream.on('error', (err) => {
+          readStream.destroy();
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: err.message });
+          }
+        });
+
+        writeStream.on('close', () => {
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: true, transferred });
+          }
+        });
+
+        readStream.pipe(writeStream);
+
+      } catch (err) {
+        // Check if this is a channel error that might be transient
+        const isChannelError = err.code === 'ECONNRESET' ||
+                              err.message.includes('Channel open') ||
+                              err.message.includes('open failed');
+
+        if (isChannelError && retryCount < maxRetries) {
+          retryCount++;
+          // Close the bad channel and retry
+          closeSftpChannel(connectionId);
+
+          const delay = 500 * Math.pow(2, retryCount - 1);
+          console.log(`[SSH] Upload channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          setTimeout(attemptUpload, delay);
+          return;
         }
-      });
 
-      readStream.on('error', (err) => {
-        writeStream.end();
-        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
-      });
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: err.message });
+        }
+      }
+    };
 
-      writeStream.on('error', (err) => {
-        readStream.destroy();
-        if (!resolved) { resolved = true; resolve({ success: false, error: err.message }); }
-      });
-
-      writeStream.on('close', () => {
-        if (!resolved) { resolved = true; resolve({ success: true, transferred }); }
-      });
-
-      readStream.pipe(writeStream);
-    });
+    // Start the first attempt
+    attemptUpload();
   });
 });
 
 /**
  * Create a remote directory via SFTP.
  */
-ipcMain.handle('ssh:sftpMkdir', (event, connectionId, remotePath) => {
+ipcMain.handle('ssh:sftpMkdir', async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
-      }
-      sftp.mkdir(remotePath, (err) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-        } else {
-          resolve({ success: true });
-        }
+  const maxRetries = 2;
+  const baseDelay = 200;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.mkdir(remotePath, (err) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+          } else {
+            resolve({ success: true });
+          }
+        });
       });
-    });
-  });
+
+      if (result.success) return result;
+
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Delete a remote file via SFTP.
  */
-ipcMain.handle('ssh:sftpDelete', (event, connectionId, remotePath) => {
+ipcMain.handle('ssh:sftpDelete', async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
-      }
-      sftp.unlink(remotePath, (err) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-        } else {
-          resolve({ success: true });
-        }
+  const maxRetries = 2;
+  const baseDelay = 200;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.unlink(remotePath, (err) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+          } else {
+            resolve({ success: true });
+          }
+        });
       });
-    });
-  });
+
+      if (result.success) return result;
+
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Remove a remote directory via SFTP.
  */
-ipcMain.handle('ssh:sftpRmdir', (event, connectionId, remotePath) => {
+ipcMain.handle('ssh:sftpRmdir', async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
-      }
-      sftp.rmdir(remotePath, (err) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-        } else {
-          resolve({ success: true });
-        }
+  const maxRetries = 2;
+  const baseDelay = 200;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.rmdir(remotePath, (err) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+          } else {
+            resolve({ success: true });
+          }
+        });
       });
-    });
-  });
+
+      if (result.success) return result;
+
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Rename a remote file/directory via SFTP.
  */
-ipcMain.handle('ssh:sftpRename', (event, connectionId, oldPath, newPath) => {
+ipcMain.handle('ssh:sftpRename', async (event, connectionId, oldPath, newPath) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
-      }
-      sftp.rename(oldPath, newPath, (err) => {
-        if (err) {
-          resolve({ success: false, error: err.message });
-        } else {
-          resolve({ success: true });
-        }
+  const maxRetries = 2;
+  const baseDelay = 200;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.rename(oldPath, newPath, (err) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+          } else {
+            resolve({ success: true });
+          }
+        });
       });
-    });
-  });
+
+      if (result.success) return result;
+
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Resolve remote home directory via SSH command.
  */
-ipcMain.handle('ssh:sftpHome', (event, connectionId) => {
+ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.exec('echo ~', (err, stream) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
-      }
-      let output = '';
-      stream.on('data', (data) => { output += data.toString(); });
-      stream.stderr.on('data', (data) => {});
-      stream.on('close', () => {
-        resolve({ success: true, path: output.trim() || '/' });
+  const maxRetries = 3;
+  const baseDelay = 300;
+
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    try {
+      // Use the pooled SFTP channel with realpath('.') to avoid opening a separate exec channel
+      const sftp = await getSftpChannel(connectionId);
+
+      const result = await new Promise((resolve) => {
+        sftp.realpath('.', (err, absPath) => {
+          if (err) {
+            resolve({ success: false, error: err.message });
+          } else {
+            resolve({ success: true, path: absPath || '/' });
+          }
+        });
       });
-    });
-  });
+
+      if (result.success) return result;
+
+      const errMsg = (result.error || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+
+      // Fallback: if realpath fails with a non-channel error, try exec
+      if (attempt === 0) {
+        try {
+          const execResult = await new Promise((resolve) => {
+            conn.exec('echo ~', (err, stream) => {
+              if (err) {
+                resolve({ success: false, error: err.message });
+                return;
+              }
+              let output = '';
+              stream.on('data', (data) => { output += data.toString(); });
+              stream.stderr.on('data', () => {});
+              stream.on('close', () => {
+                resolve({ success: true, path: output.trim() || '/' });
+              });
+            });
+          });
+          if (execResult.success) return execResult;
+        } catch (e) {
+          // exec fallback failed too, continue with retry
+        }
+      }
+
+      return result;
+    } catch (err) {
+      const errMsg = (err.message || '').toLowerCase();
+      const isChannelErr = errMsg.includes('channel') ||
+                           errMsg.includes('open failed') ||
+                           errMsg.includes('too many') ||
+                           errMsg.includes('resource');
+      if (isChannelErr && attempt < maxRetries) {
+        closeSftpChannel(connectionId);
+        continue;
+      }
+
+      // Final fallback to exec if SFTP channel creation fails completely
+      if (attempt === maxRetries) {
+        try {
+          const execResult = await new Promise((resolve) => {
+            conn.exec('echo ~', (err, stream) => {
+              if (err) {
+                resolve({ success: false, error: err.message });
+                return;
+              }
+              let output = '';
+              stream.on('data', (data) => { output += data.toString(); });
+              stream.stderr.on('data', () => {});
+              stream.on('close', () => {
+                resolve({ success: true, path: output.trim() || '/' });
+              });
+            });
+          });
+          if (execResult.success) return execResult;
+        } catch (e) {
+          // exec fallback also failed
+        }
+      }
+
+      return { success: false, error: err.message };
+    }
+  }
+
+  return { success: false, error: 'Max retries exceeded' };
 });
 
 /**
  * Execute an arbitrary command over SSH.
  * Returns { success, stdout, stderr, exitCode }
+ * Includes automatic retry with backoff for channel exhaustion errors.
  */
-ipcMain.handle('ssh:exec', (event, connectionId, command) => {
+ipcMain.handle('ssh:exec', async (event, connectionId, command) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) return { success: false, error: 'No active connection' };
 
-  return new Promise((resolve) => {
-    conn.exec(command, (err, stream) => {
-      if (err) {
-        resolve({ success: false, error: err.message, stdout: '', stderr: err.message, exitCode: -1 });
-        return;
-      }
-      let stdout = '';
-      let stderr = '';
-      let exitCode = 0;
+  const maxRetries = 3;
+  const baseDelay = 300; // ms
 
-      stream.on('data', (data) => { stdout += data.toString(); });
-      stream.stderr.on('data', (data) => { stderr += data.toString(); });
-      stream.on('close', (code) => {
-        exitCode = code || 0;
-        resolve({
-          success: exitCode === 0,
-          stdout: stdout.trim(),
-          stderr: stderr.trim(),
-          exitCode: exitCode,
-          error: exitCode !== 0 ? stderr.trim() || 'Command failed (exit ' + exitCode + ')' : null,
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    // If this is a retry, wait with exponential backoff before trying again
+    if (attempt > 0) {
+      const delay = baseDelay * attempt;
+      await new Promise(r => setTimeout(r, delay));
+    }
+
+    const result = await new Promise((resolve) => {
+      conn.exec(command, (err, stream) => {
+        if (err) {
+          resolve({ success: false, error: err.message, stdout: '', stderr: err.message, exitCode: -1, _channelError: true });
+          return;
+        }
+        let stdout = '';
+        let stderr = '';
+        let exitCode = 0;
+
+        stream.on('data', (data) => { stdout += data.toString(); });
+        stream.stderr.on('data', (data) => { stderr += data.toString(); });
+        stream.on('close', (code) => {
+          exitCode = code || 0;
+          resolve({
+            success: exitCode === 0,
+            stdout: stdout.trim(),
+            stderr: stderr.trim(),
+            exitCode: exitCode,
+            error: exitCode !== 0 ? stderr.trim() || 'Command failed (exit ' + exitCode + ')' : null,
+            _channelError: false,
+          });
         });
       });
     });
-  });
+
+    // If it succeeded or the error is NOT channel-related, return immediately
+    if (result.success || !result._channelError) {
+      // Strip internal flag before returning to renderer
+      delete result._channelError;
+      return result;
+    }
+
+    // Check if the error is a transient channel error worth retrying
+    const errMsg = (result.error || '').toLowerCase();
+    const isChannelErr = errMsg.includes('channel') ||
+                         errMsg.includes('open failed') ||
+                         errMsg.includes('too many') ||
+                         errMsg.includes('resource');
+
+    if (!isChannelErr || attempt >= maxRetries) {
+      delete result._channelError;
+      return result;
+    }
+
+    // Channel error — will retry on next loop iteration
+    console.log(`[SSH:exec] Channel error on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${baseDelay * (attempt + 1)}ms...`);
+  }
+
+  // Should not reach here, but safety fallback
+  return { success: false, error: 'Max retries exceeded', stdout: '', stderr: '', exitCode: -1 };
 });
 
 /**
  * Read a remote file's text content via SFTP.
+ * Uses reusable SFTP channel with retry logic for channel errors.
  * Returns { success, content } or { success: false, error }
  */
 ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
@@ -1222,34 +1730,80 @@ ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
   if (!conn) return { success: false, error: 'No active connection' };
 
   return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
+    let resolved = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const attemptRead = async () => {
+      try {
+        // Reuse existing SFTP channel to avoid "Channel open failure" errors
+        const sftp = await getSftpChannel(connectionId);
+
+        const chunks = [];
+        const readStream = sftp.createReadStream(remotePath);
+
+        readStream.on('data', (chunk) => {
+          chunks.push(chunk);
+        });
+
+        readStream.on('error', (readErr) => {
+          if (!resolved) {
+            const isChannelError = readErr.code === 'ECONNRESET' ||
+                                  readErr.message.includes('Channel open') ||
+                                  readErr.message.includes('open failed');
+
+            if (isChannelError && retryCount < maxRetries) {
+              retryCount++;
+              closeSftpChannel(connectionId);
+              const delay = 500 * Math.pow(2, retryCount - 1);
+              console.log(`[SSH] Read stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+              setTimeout(attemptRead, delay);
+              return;
+            }
+
+            resolved = true;
+            resolve({ success: false, error: readErr.message });
+          }
+        });
+
+        readStream.on('close', () => {
+          if (!resolved) {
+            resolved = true;
+            const content = Buffer.concat(chunks).toString('utf-8');
+            resolve({ success: true, content: content });
+          }
+        });
+
+      } catch (err) {
+        // getSftpChannel() threw — check if this is a transient channel error
+        const isChannelError = err.code === 'ECONNRESET' ||
+                              err.message.includes('Channel open') ||
+                              err.message.includes('open failed');
+
+        if (isChannelError && retryCount < maxRetries) {
+          retryCount++;
+          closeSftpChannel(connectionId);
+          const delay = 500 * Math.pow(2, retryCount - 1);
+          console.log(`[SSH] Read channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          setTimeout(attemptRead, delay);
+          return;
+        }
+
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: err.message });
+        }
       }
+    };
 
-      const chunks = [];
-      const readStream = sftp.createReadStream(remotePath);
-
-      readStream.on('data', (chunk) => {
-        chunks.push(chunk);
-      });
-
-      readStream.on('error', (readErr) => {
-        resolve({ success: false, error: readErr.message });
-      });
-
-      readStream.on('close', () => {
-        const content = Buffer.concat(chunks).toString('utf-8');
-        resolve({ success: true, content: content });
-      });
-    });
+    attemptRead();
   });
 });
 
 /**
  * Read a remote file's binary content via SFTP and return as base64.
  * Used by file-viewer to display images and PDFs.
+ * Uses reusable SFTP channel with retry logic for channel errors.
  * Returns { success, content } or { success: false, error }
  */
 ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
@@ -1257,33 +1811,79 @@ ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
   if (!conn) return { success: false, error: 'No active connection' };
 
   return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
+    let resolved = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const attemptRead = async () => {
+      try {
+        // Reuse existing SFTP channel to avoid "Channel open failure" errors
+        const sftp = await getSftpChannel(connectionId);
+
+        const chunks = [];
+        const readStream = sftp.createReadStream(remotePath);
+
+        readStream.on('data', (chunk) => {
+          chunks.push(chunk);
+        });
+
+        readStream.on('error', (readErr) => {
+          if (!resolved) {
+            const isChannelError = readErr.code === 'ECONNRESET' ||
+                                  readErr.message.includes('Channel open') ||
+                                  readErr.message.includes('open failed');
+
+            if (isChannelError && retryCount < maxRetries) {
+              retryCount++;
+              closeSftpChannel(connectionId);
+              const delay = 500 * Math.pow(2, retryCount - 1);
+              console.log(`[SSH] ReadBase64 stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+              setTimeout(attemptRead, delay);
+              return;
+            }
+
+            resolved = true;
+            resolve({ success: false, error: readErr.message });
+          }
+        });
+
+        readStream.on('close', () => {
+          if (!resolved) {
+            resolved = true;
+            const content = Buffer.concat(chunks).toString('base64');
+            resolve({ success: true, content: content });
+          }
+        });
+
+      } catch (err) {
+        // getSftpChannel() threw — check if this is a transient channel error
+        const isChannelError = err.code === 'ECONNRESET' ||
+                              err.message.includes('Channel open') ||
+                              err.message.includes('open failed');
+
+        if (isChannelError && retryCount < maxRetries) {
+          retryCount++;
+          closeSftpChannel(connectionId);
+          const delay = 500 * Math.pow(2, retryCount - 1);
+          console.log(`[SSH] ReadBase64 channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          setTimeout(attemptRead, delay);
+          return;
+        }
+
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: err.message });
+        }
       }
+    };
 
-      const chunks = [];
-      const readStream = sftp.createReadStream(remotePath);
-
-      readStream.on('data', (chunk) => {
-        chunks.push(chunk);
-      });
-
-      readStream.on('error', (readErr) => {
-        resolve({ success: false, error: readErr.message });
-      });
-
-      readStream.on('close', () => {
-        const content = Buffer.concat(chunks).toString('base64');
-        resolve({ success: true, content: content });
-      });
-    });
+    attemptRead();
   });
 });
 
 /**
  * Write text content to a remote file via SFTP.
+ * Uses reusable SFTP channel with retry logic for channel errors.
  * Returns { success: true } or { success: false, error }
  */
 ipcMain.handle('ssh:sftpWriteFile', (event, connectionId, remotePath, content) => {
@@ -1291,24 +1891,70 @@ ipcMain.handle('ssh:sftpWriteFile', (event, connectionId, remotePath, content) =
   if (!conn) return { success: false, error: 'No active connection' };
 
   return new Promise((resolve) => {
-    conn.sftp((err, sftp) => {
-      if (err) {
-        resolve({ success: false, error: err.message });
-        return;
+    let resolved = false;
+    let retryCount = 0;
+    const maxRetries = 3;
+
+    const attemptWrite = async () => {
+      try {
+        // Reuse existing SFTP channel to avoid "Channel open failure" errors
+        const sftp = await getSftpChannel(connectionId);
+
+        const writeStream = sftp.createWriteStream(remotePath);
+
+        writeStream.on('error', (writeErr) => {
+          if (!resolved) {
+            // Check if this is a channel error that might be transient
+            const isChannelError = writeErr.code === 'ECONNRESET' ||
+                                  writeErr.message.includes('Channel open') ||
+                                  writeErr.message.includes('open failed');
+
+            if (isChannelError && retryCount < maxRetries) {
+              retryCount++;
+              closeSftpChannel(connectionId);
+              const delay = 500 * Math.pow(2, retryCount - 1);
+              console.log(`[SSH] Write stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+              setTimeout(attemptWrite, delay);
+              return;
+            }
+
+            resolved = true;
+            resolve({ success: false, error: writeErr.message });
+          }
+        });
+
+        writeStream.on('close', () => {
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: true });
+          }
+        });
+
+        writeStream.end(content, 'utf-8');
+
+      } catch (err) {
+        // getSftpChannel() threw — check if this is a transient channel error
+        const isChannelError = err.code === 'ECONNRESET' ||
+                              err.message.includes('Channel open') ||
+                              err.message.includes('open failed');
+
+        if (isChannelError && retryCount < maxRetries) {
+          retryCount++;
+          closeSftpChannel(connectionId);
+          const delay = 500 * Math.pow(2, retryCount - 1);
+          console.log(`[SSH] Write channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          setTimeout(attemptWrite, delay);
+          return;
+        }
+
+        if (!resolved) {
+          resolved = true;
+          resolve({ success: false, error: err.message });
+        }
       }
+    };
 
-      const writeStream = sftp.createWriteStream(remotePath);
-
-      writeStream.on('error', (writeErr) => {
-        resolve({ success: false, error: writeErr.message });
-      });
-
-      writeStream.on('close', () => {
-        resolve({ success: true });
-      });
-
-      writeStream.end(content, 'utf-8');
-    });
+    attemptWrite();
   });
 });
 
@@ -1729,6 +2375,36 @@ ipcMain.handle('fs:writeFile', (event, filePath, content, encoding) => {
   try {
     const resolved = path.resolve(filePath);
     fs.writeFileSync(resolved, content, encoding || 'utf-8');
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+/**
+ * Rename a local file or directory.
+ */
+ipcMain.handle('fs:rename', (event, oldPath, newPath) => {
+  try {
+    const resolvedOld = path.resolve(oldPath);
+    const resolvedNew = path.resolve(newPath);
+    fs.renameSync(resolvedOld, resolvedNew);
+    return { success: true };
+  } catch (err) {
+    return { success: false, error: err.message };
+  }
+});
+
+ipcMain.handle('fs:copyPath', (event, sourcePath, destPath) => {
+  try {
+    const resolvedSrc = path.resolve(sourcePath);
+    const resolvedDst = path.resolve(destPath);
+    const stat = fs.statSync(resolvedSrc);
+    if (stat.isDirectory()) {
+      fs.cpSync(resolvedSrc, resolvedDst, { recursive: true });
+    } else {
+      fs.copyFileSync(resolvedSrc, resolvedDst);
+    }
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };

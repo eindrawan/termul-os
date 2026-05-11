@@ -276,6 +276,8 @@ class PluginLoader {
    */
   createPluginAPI(dirName, windowId) {
     const self = this;
+    /** Per-window component cache to avoid creating duplicate containers (e.g. toast). */
+    const _componentCache = {};
     return {
       /** Plugin's own manifest */
       manifest: self.plugins.get(dirName),
@@ -758,8 +760,17 @@ class PluginLoader {
         toast(opts = {}) {
           const instance = window.PluginLoader.instances.get(windowId);
           const shadow = instance ? instance.shadow : null;
+
+          // Reuse cached toast instance for this plugin window.
+          // Prevents creating a new .tui-toast-container on every api.ui.toast() call.
+          const cacheKey = 'toast:' + (opts.position || 'bottom-right');
+          if (_componentCache[cacheKey]) {
+            return _componentCache[cacheKey];
+          }
+
           const comp = new window.TuiToast(shadow, opts);
           if (instance) instance._components.push(comp);
+          _componentCache[cacheKey] = comp;
           return comp;
         },
 

@@ -84,12 +84,7 @@
     els.statusSource = shadow.getElementById('fv-status-source');
     els.statusSize = shadow.getElementById('fv-status-size');
 
-    // Remote modal elements
-    els.remoteModal = shadow.getElementById('fv-remote-modal');
-    els.remotePathInput = shadow.getElementById('fv-remote-path');
-    els.remoteOk = shadow.getElementById('fv-remote-ok');
-    els.remoteCancel = shadow.getElementById('fv-remote-cancel');
-    els.remoteClose = shadow.getElementById('fv-remote-modal-close');
+    // Remote modal — now uses api.ui.modal (no HTML modal needed)
 
     // Bind toolbar events
     addEventListener(els.openLocalBtn, 'click', openLocalFileDialog);
@@ -103,14 +98,7 @@
     addEventListener(els.emptyOpenLocal, 'click', openLocalFileDialog);
     addEventListener(els.emptyOpenRemote, 'click', showRemoteFileDialog);
 
-    // Remote modal events
-    addEventListener(els.remoteOk, 'click', openRemoteFile);
-    addEventListener(els.remoteCancel, 'click', hideRemoteFileDialog);
-    addEventListener(els.remoteClose, 'click', hideRemoteFileDialog);
-    addEventListener(els.remotePathInput, 'keydown', function (e) {
-      if (e.key === 'Enter') openRemoteFile();
-      if (e.key === 'Escape') hideRemoteFileDialog();
-    });
+    // Remote modal events — now uses api.ui.modal
 
     // Mouse wheel zoom on viewer
     addEventListener(els.content, 'wheel', function (e) {
@@ -199,20 +187,42 @@
       toast.show('Not connected to SSH server', 'error');
       return;
     }
-    els.remotePathInput.value = '';
-    els.remoteModal.classList.add('open');
-    els.remotePathInput.focus();
+    var modal = api.ui.modal({
+      title: 'Open Remote File',
+      content:
+        '<label style="display:block;margin-bottom:6px;font-size:13px;color:var(--tui-text-secondary);">File path on remote server:</label>' +
+        '<input type="text" class="tui-input" id="fv-remote-path-input" placeholder="/home/user/image.png" style="width:100%;">',
+      buttons: [
+        { label: 'Cancel', variant: 'default', onClick: function(m) { m.close(); } },
+        { label: 'Open', variant: 'primary', onClick: function(m) {
+          var remotePath = m.el.querySelector('#fv-remote-path-input').value.trim();
+          if (!remotePath) return;
+          m.close();
+          openFile(remotePath, SOURCE_REMOTE);
+        }}
+      ]
+    });
+    modal.open();
+    setTimeout(function() {
+      var input = modal.el.querySelector('#fv-remote-path-input');
+      if (input) {
+        input.focus();
+        input.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter') {
+            var openBtn = modal.el.querySelector('.tui-btn-primary');
+            if (openBtn) openBtn.click();
+          }
+        });
+      }
+    }, 50);
   }
 
   function hideRemoteFileDialog() {
-    els.remoteModal.classList.remove('open');
+    // No-op: kept for API compatibility (restoreEmptyState references removed)
   }
 
-  function openRemoteFile() {
-    var remotePath = els.remotePathInput.value.trim();
-    if (!remotePath) return;
-    hideRemoteFileDialog();
-    openFile(remotePath, SOURCE_REMOTE);
+  async function openRemoteFile() {
+    // No-op: logic moved into showRemoteFileDialog modal callback
   }
 
   async function openFile(path, source) {

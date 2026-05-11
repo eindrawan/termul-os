@@ -63,10 +63,18 @@ class TuiDropdown extends TuiComponent {
 
     this.el = menu;
 
-    // Close on click outside
+    // Close on click outside.
+    // Use composedPath() instead of e.target / el.contains() so that clicks
+    // inside the Shadow DOM are correctly detected.  Without this, Shadow DOM
+    // retargeting makes e.target appear as the shadow-host element, which is
+    // never a descendant of the dropdown, causing the menu to close before the
+    // click handler on menu items can fire.
     this.listen(this.shadow.ownerDocument || document, 'mousedown', (e) => {
-      if (this.state.open && !this.el.contains(e.target) && e.target !== this.opts.trigger) {
-        this.close();
+      if (this.state.open) {
+        const path = e.composedPath();
+        if (!path.includes(this.el) && !path.includes(this.opts.trigger)) {
+          this.close();
+        }
       }
     });
 

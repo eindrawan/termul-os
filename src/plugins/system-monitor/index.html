@@ -47,11 +47,19 @@
           <div class="tui-card-title">Memory</div>
         </div>
         <div class="tui-card-body">
-          <div class="monitor-value" id="memory-value">--</div>
-          <div class="tui-progress">
-            <div class="tui-progress-fill" id="memory-bar" style="width: 0%"></div>
+          <div class="monitor-card-row">
+            <div class="monitor-card-main">
+              <div class="monitor-value" id="memory-value">--</div>
+              <div class="tui-progress">
+                <div class="tui-progress-fill" id="memory-bar" style="width: 0%"></div>
+              </div>
+              <div class="tui-text-sm tui-text-tertiary" id="memory-total">-- / --</div>
+            </div>
+            <div class="monitor-available" id="memory-available">
+              <div class="monitor-available-label">Available</div>
+              <div class="monitor-available-value" id="memory-available-value">--</div>
+            </div>
           </div>
-          <div class="tui-text-sm tui-text-tertiary" id="memory-total">-- / --</div>
         </div>
       </div>
 
@@ -82,11 +90,19 @@
           <div class="tui-card-title">Disk</div>
         </div>
         <div class="tui-card-body">
-          <div class="monitor-value" id="disk-value">--</div>
-          <div class="tui-progress">
-            <div class="tui-progress-fill" id="disk-bar" style="width: 0%"></div>
+          <div class="monitor-card-row">
+            <div class="monitor-card-main">
+              <div class="monitor-value" id="disk-value">--</div>
+              <div class="tui-progress">
+                <div class="tui-progress-fill" id="disk-bar" style="width: 0%"></div>
+              </div>
+              <div class="tui-text-sm tui-text-tertiary" id="disk-mount">/</div>
+            </div>
+            <div class="monitor-available" id="disk-available">
+              <div class="monitor-available-label">Available</div>
+              <div class="monitor-available-value" id="disk-available-value">--</div>
+            </div>
           </div>
-          <div class="tui-text-sm tui-text-tertiary" id="disk-mount">/</div>
         </div>
       </div>
     </div>

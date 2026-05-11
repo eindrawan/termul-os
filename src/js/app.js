@@ -112,6 +112,11 @@ class TermulOS {
     document.addEventListener('termul:docker-open-shell', (e) => {
       this.openDockerShell(e.detail);
     });
+
+    // Listen for "run in terminal" events from any plugin
+    document.addEventListener('termul:open-terminal-command', (e) => {
+      this.openTerminalAndRun(e.detail);
+    });
   }
 
   /**
@@ -954,6 +959,40 @@ class TermulOS {
     setTimeout(waitForMount, 100);
   }
 
+  /**
+   * Open a terminal window and run an arbitrary command (from any plugin).
+   * @param {Object} detail - { command: string }
+   */
+  openTerminalAndRun(detail) {
+    if (!detail || !detail.command) return;
+
+    const terminalPlugin = this.plugins.find(p => p.dirName === 'terminal');
+    if (!terminalPlugin) {
+      console.warn('[TermulOS] terminal plugin not found');
+      return;
+    }
+
+    const windowId = window.WindowManager.open(terminalPlugin);
+
+    setTimeout(() => {
+      window.WindowManager.focus(windowId);
+    }, 0);
+
+    const waitForMount = () => {
+      const instance = window.PluginLoader.instances.get(windowId);
+      if (instance && instance._lifecycle && instance._lifecycle.onMount) {
+        setTimeout(() => {
+          document.dispatchEvent(new CustomEvent('termul:terminal-run-command', {
+            detail: { command: detail.command, windowId: windowId }
+          }));
+        }, 300);
+      } else {
+        setTimeout(waitForMount, 100);
+      }
+    };
+    setTimeout(waitForMount, 100);
+  }
+
   /* ═════════════════════════════════════════════════════════════════════
    * Tab Management
    * ═════════════════════════════════════════════════════════════════════ */
@@ -1411,11 +1450,20 @@ class TermulOS {
 
     tab.status = 'disconnected';
 
+    // Clear the connectionId to prevent plugins from using a stale connection
+    const oldConnectionId = tab.connectionId;
+    tab.connectionId = null;
+
+    // If this is the active tab, also clear the live connection reference
+    if (tab.id === this.activeTabId) {
+      this.connectionId = null;
+    }
+
     // Notify all plugins via the event bus
     document.dispatchEvent(new CustomEvent('termul:connection-status', {
       detail: {
         status: 'disconnected',
-        connectionId: connectionId,
+        connectionId: oldConnectionId, // Send the old connectionId for reference
         profile: tab.profile,
         reason: reason
       }

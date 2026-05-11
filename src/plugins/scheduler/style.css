@@ -1,8 +1,6 @@
-/* Scheduler Plugin Styles */
+/* ─── Scheduler Plugin — Windows 11 Fluent Design ─────────────────── */
 
-/* ─── Box-sizing reset for this plugin ────────────────────────────── */
-/* The shared .tui-input has width:100% + padding but no box-sizing,
-   which causes horizontal overflow in grid layouts. */
+/* Box-sizing reset */
 .scheduler-container *,
 .scheduler-container *::before,
 .scheduler-container *::after {
@@ -15,82 +13,142 @@
   display: flex;
   flex-direction: column;
   background: var(--tui-bg-surface, #0f0f0f);
-  color: var(--tui-text-primary, #e0e0e0);
+  color: var(--tui-text-primary, #FFFFFF);
   position: relative;
   overflow: hidden;
+  font-family: "Segoe UI Variable", "Segoe UI", var(--tui-font-family, system-ui), sans-serif;
 }
 
-.scheduler-content {
+/* ─── Toolbar — Win11 command bar style ────────────────────────────── */
+.scheduler-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+  gap: 12px;
+}
+
+.scheduler-toolbar-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.scheduler-toolbar-icon {
+  width: 18px;
+  height: 18px;
+  color: var(--tui-accent-secondary, #60CDFF);
+  flex-shrink: 0;
+}
+
+.scheduler-toolbar-title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--tui-text-primary, #FFFFFF);
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.scheduler-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+/* ─── Body Content Area ───────────────────────────────────────────── */
+.scheduler-body {
   flex: 1;
   overflow-y: auto;
   overflow-x: hidden;
-  padding: 16px;
+  padding: 16px 20px;
 }
 
-/* ─── Toolbar Select ──────────────────────────────────────────────── */
-.tui-select-sm {
-  padding: 4px 8px !important;
-  font-size: 12px !important;
-  min-width: 120px !important;
-}
-
-/* ─── Empty State Override ──────────────────────────────────────────── */
-/* Shared .tui-empty has no flex layout, so icon and text go inline.
-   Do NOT use display:flex !important — JS toggles display:none/flex. */
+/* ─── Empty State ──────────────────────────────────────────────────── */
 .tui-empty {
   flex-direction: column !important;
   align-items: center !important;
   justify-content: center !important;
-  min-height: 200px;
+  min-height: 240px;
+  padding: 48px 24px;
 }
 
 .tui-empty-icon {
   display: block !important;
+  opacity: 0.4;
+  margin-bottom: 16px;
 }
 
-/* ─── Crontab Entry Row ────────────────────────────────────────────── */
-.cron-list {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
+.tui-empty-text {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
+  margin-bottom: 4px;
 }
 
-.cron-entry {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 12px 16px;
-  background: var(--tui-bg-hover, rgba(255,255,255,0.04));
-  border: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
-  border-radius: var(--tui-radius-md, 8px);
-  transition: background var(--tui-transition-fast, 150ms ease);
-  min-width: 0;
-}
-
-.cron-entry:hover {
-  background: var(--tui-bg-active, rgba(255,255,255,0.07));
-}
-
-.cron-entry.disabled {
-  opacity: 0.5;
-}
-
-.cron-entry.disabled .cron-schedule-text {
-  text-decoration: line-through;
-}
-
-/* Enable/disable checkbox */
-.cron-checkbox {
-  flex-shrink: 0;
-  width: 18px;
-  height: 18px;
-  accent-color: var(--tui-accent-primary, #0067C0);
-  cursor: pointer;
+.tui-empty-subtext {
+  font-size: 12px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
   margin: 0;
 }
 
+/* ─── Crontab Entry List ───────────────────────────────────────────── */
+.cron-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+/* Win11 list item style — similar to Windows Settings rows */
+.cron-entry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 12px 16px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid transparent;
+  border-radius: var(--tui-radius-md, 8px);
+  transition: background 120ms ease, border-color 120ms ease;
+  min-width: 0;
+  cursor: default;
+}
+
+.cron-entry:hover {
+  background: rgba(255, 255, 255, 0.055);
+  border-color: var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+}
+
+.cron-entry:active {
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.cron-entry.disabled {
+  opacity: 0.45;
+}
+
 .cron-entry.disabled .cron-schedule-text {
   text-decoration: line-through;
+  text-decoration-color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.3));
+}
+
+/* Entry status indicator — colored left bar */
+.cron-entry-status {
+  width: 3px;
+  height: 28px;
+  border-radius: 2px;
+  background: var(--tui-accent-primary, #0067C0);
+  flex-shrink: 0;
+  transition: background 120ms ease;
+}
+
+.cron-entry.disabled .cron-entry-status {
+  background: var(--tui-text-disabled, rgba(255, 255, 255, 0.25));
 }
 
 /* Schedule & command text */
@@ -99,13 +157,14 @@
   min-width: 0;
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 3px;
   overflow: hidden;
 }
 
 .cron-schedule-text {
-  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+  font-family: var(--tui-font-mono, 'Cascadia Code', monospace);
   font-size: 13px;
+  font-weight: 500;
   color: var(--tui-accent-secondary, #60CDFF);
   white-space: nowrap;
   overflow: hidden;
@@ -113,28 +172,33 @@
 }
 
 .cron-command-text {
-  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+  font-family: var(--tui-font-mono, 'Cascadia Code', monospace);
   font-size: 12px;
-  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.6));
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
 }
 
-/* Actions */
-.cron-actions {
+/* Right-side controls */
+.cron-right-controls {
   display: flex;
-  gap: 4px;
+  align-items: center;
+  gap: 6px;
   flex-shrink: 0;
-  opacity: 0;
-  transition: opacity var(--tui-transition-fast, 150ms ease);
 }
 
-.cron-entry:hover .cron-actions {
+/* Menu button — show on hover */
+.cron-menu-trigger {
+  opacity: 0;
+  transition: opacity 120ms ease;
+}
+
+.cron-entry:hover .cron-menu-trigger {
   opacity: 1;
 }
 
-/* ─── Form Overlay ─────────────────────────────────────────────────── */
+/* ─── Form Overlay — Win11 ContentDialog ────────────────────────────── */
 .cron-form-overlay {
   display: none;
   position: absolute;
@@ -142,7 +206,9 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(8px) saturate(1.2);
+  -webkit-backdrop-filter: blur(8px) saturate(1.2);
   z-index: 100;
   align-items: center;
   justify-content: center;
@@ -153,33 +219,58 @@
 }
 
 .cron-form {
-  background: var(--tui-bg-elevated, rgba(28,28,28,0.95));
-  border: 1px solid var(--tui-border-medium, rgba(255,255,255,0.1));
-  border-radius: var(--tui-radius-lg, 12px);
-  width: 480px;
-  max-width: 90%;
-  box-shadow: var(--tui-shadow-lg, 0 4px 24px rgba(0,0,0,0.35));
+  background: #2B2B2B;
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-radius: 8px;
+  width: 520px;
+  max-width: 92%;
+  overflow: hidden;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.04),
+    0 8px 16px rgba(0, 0, 0, 0.14),
+    0 24px 48px rgba(0, 0, 0, 0.26);
+  animation: cron-form-in 167ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+
+@keyframes cron-form-in {
+  from { opacity: 0; transform: scale(0.975) translateY(6px); }
+  to { opacity: 1; transform: scale(1) translateY(0); }
 }
 
 .cron-form-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
+  padding: 20px 24px 0 24px;
 }
 
 .cron-form-title {
-  font-size: 15px;
+  font-size: 18px;
   font-weight: 600;
-  color: var(--tui-text-primary);
+  color: rgba(255, 255, 255, 0.95);
+  letter-spacing: -0.01em;
 }
 
 .cron-form-body {
-  padding: 20px;
+  padding: 16px 24px 20px 24px;
   display: flex;
   flex-direction: column;
-  gap: 16px;
+  gap: 20px;
+}
+
+/* Form sections with labels */
+.cron-form-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.cron-form-section-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
 }
 
 /* Schedule grid */
@@ -197,18 +288,10 @@
   min-width: 0;
 }
 
-.cron-field-full {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
 .cron-field-label {
-  font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.7));
 }
 
 .cron-field-input {
@@ -219,158 +302,46 @@
 
 .cron-field-hint {
   font-size: 10px;
-  color: var(--tui-text-tertiary, rgba(255,255,255,0.3));
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.3));
   text-align: center;
 }
 
-/* Form actions */
+/* Win11-style input — bottom accent border */
+.cron-form .tui-input {
+  background: rgba(255, 255, 255, 0.045);
+  border: 1px solid rgba(255, 255, 255, 0.07);
+  border-bottom: 2px solid rgba(255, 255, 255, 0.12);
+  border-radius: 5px;
+  padding: 8px 12px;
+  font-size: 13.5px;
+  transition: border-color 120ms ease, background 120ms ease;
+}
+
+.cron-form .tui-input:focus {
+  outline: none;
+  border-bottom-color: #60CDFF;
+  background: rgba(255, 255, 255, 0.06);
+  box-shadow: none;
+}
+
+.cron-form .tui-input::placeholder {
+  color: rgba(255, 255, 255, 0.3);
+}
+
+/* Form actions — Win11 dialog footer band */
 .cron-form-actions {
   display: flex;
   justify-content: flex-end;
   gap: 8px;
-  padding-top: 4px;
+  padding: 14px 24px 18px;
+  margin: 0 -24px -20px;
+  background: #202020;
+  border-radius: 0 0 8px 8px;
 }
 
-/* ─── Sudo Password Modal ─────────────────────────────────────────── */
-.cron-sudo-overlay {
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.6);
-  z-index: 200;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-}
-
-.cron-sudo-modal {
-  background: var(--tui-bg-elevated, rgba(28,28,28,0.95));
-  border: 1px solid var(--tui-border-medium, rgba(255,255,255,0.1));
-  border-radius: var(--tui-radius-lg, 12px);
-  width: 400px;
-  max-width: 90%;
-  box-shadow: var(--tui-shadow-lg, 0 4px 24px rgba(0,0,0,0.35));
-}
-
-.cron-sudo-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 16px 20px;
-  border-bottom: 1px solid var(--tui-border-subtle, rgba(255,255,255,0.06));
-}
-
-.cron-sudo-title {
-  font-size: 15px;
-  font-weight: 600;
-  color: var(--tui-text-primary);
-}
-
-.cron-sudo-body {
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.cron-sudo-desc {
-  margin: 0;
-  font-size: 13px;
-  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
-  line-height: 1.5;
-}
-
-.cron-sudo-desc strong {
-  color: var(--tui-accent-secondary, #60CDFF);
-}
-
-/* ─── Password Field with Eye Toggle ───────────────────────────────── */
-.cron-pw-field {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.cron-pw-input-wrap {
-  position: relative;
-  display: flex;
-  align-items: center;
-}
-
-.cron-pw-input-wrap .tui-input {
-  padding-right: 40px !important;
-}
-
-.cron-pw-toggle {
-  position: absolute;
-  right: 8px;
-  background: none;
-  border: none;
-  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--tui-radius-sm, 4px);
-  transition: color var(--tui-transition-fast, 150ms ease);
-}
-
-.cron-pw-toggle:hover {
-  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
-}
-
-.cron-sudo-footer {
-  display: flex;
-  justify-content: flex-end;
-  gap: 8px;
-  padding: 0 20px 16px;
-}
-
-.cron-sudo-remember {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: var(--tui-text-secondary, rgba(255,255,255,0.7));
-  cursor: pointer;
-}
-
-.cron-sudo-remember input[type="checkbox"] {
-  accent-color: var(--tui-accent-primary, #0067C0);
-}
-
-/* ─── Loading ──────────────────────────────────────────────────────── */
-.scheduler-loading {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  height: 120px;
-  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
-  font-size: 13px;
-  gap: 8px;
-}
-
-.scheduler-loading .tui-status-dot {
-  display: inline-block;
-}
-
-/* ─── Small Buttons ────────────────────────────────────────────────── */
-.tui-btn-sm {
-  padding: 4px 10px !important;
-  font-size: 12px !important;
-}
-
-.tui-btn-sm svg {
-  width: 12px;
-  height: 12px;
-}
-
-/* ─── Error State ──────────────────────────────────────────────────── */
+/* ─── Sudo Password Modal (unused — using api.ui.modal now) ─────────── */
 .scheduler-error {
-  padding: 16px;
+  padding: 24px 16px;
   color: var(--tui-error-text, #ff6b6b);
   font-size: 13px;
   text-align: center;

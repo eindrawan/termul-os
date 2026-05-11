@@ -1,0 +1,13 @@
+{
+  "name": "iptables GUI",
+  "description": "Visual firewall management for iptables - view, add, edit and delete rules across chains with a user-friendly interface",
+  "version": "1.0.0",
+  "author": "TermulOS",
+  "dirName": "iptables-gui",
+  "icon": "icon.svg",
+  "window": {
+    "width": 950,
+    "height": 680
+  },
+  "permissions": ["ssh"]
+}

@@ -81,6 +81,8 @@ contextBridge.exposeInMainWorld('termulAPI', {
     createFile: (filePath) => ipcRenderer.invoke('fs:createFile', filePath),
     readFile: (filePath, encoding) => ipcRenderer.invoke('fs:readFile', filePath, encoding),
     writeFile: (filePath, content, encoding) => ipcRenderer.invoke('fs:writeFile', filePath, content, encoding),
+    rename: (oldPath, newPath) => ipcRenderer.invoke('fs:rename', oldPath, newPath),
+    copyPath: (sourcePath, destPath) => ipcRenderer.invoke('fs:copyPath', sourcePath, destPath),
   },
 
   // ─── Plugins ────────────────────────────────────────────────────────

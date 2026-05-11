@@ -21,6 +21,19 @@
 
   // UI Elements
   let statusEl, containerListEl, containerFilterEl, containerCountEl;
+  let _toast = null;
+
+  /**
+   * Lazy-initialize the toast instance. TuiToast needs the shadow root
+   * which may not be available during onMount, so we defer creation
+   * until the first actual use (user-triggered action).
+   */
+  function getToast() {
+    if (!_toast) {
+      _toast = api.ui.toast({ position: 'bottom-right', defaultDuration: 3000 });
+    }
+    return _toast;
+  }
 
   // ─── Lifecycle ──────────────────────────────────────────────────────
 
@@ -28,8 +41,26 @@
     // Cache key elements
     statusEl = shadow.getElementById('docker-status');
     containerListEl = shadow.getElementById('container-list');
-    containerFilterEl = shadow.getElementById('container-filter');
     containerCountEl = shadow.getElementById('container-count');
+
+    // Create container filter using TUI select factory
+    const filterWrapper = shadow.getElementById('container-filter-wrapper');
+    if (filterWrapper) {
+      containerFilterEl = api.ui.select({
+        options: [
+          { value: 'all', label: 'All' },
+          { value: 'running', label: 'Running' },
+          { value: 'stopped', label: 'Stopped' }
+        ],
+        value: 'running',
+        onChange: (value) => {
+          state.containerFilter = value;
+          renderContainers();
+        }
+      });
+      containerFilterEl.classList.add('docker-filter-select');
+      filterWrapper.appendChild(containerFilterEl);
+    }
 
     // Setup toolbar buttons
     shadow.getElementById('docker-refresh')?.addEventListener('click', refreshCurrentView);
@@ -39,12 +70,6 @@
     const tabs = shadow.querySelectorAll('.docker-tab');
     tabs.forEach(tab => {
       tab.addEventListener('click', () => switchTab(tab.dataset.tab));
-    });
-
-    // Setup container filter
-    containerFilterEl?.addEventListener('change', (e) => {
-      state.containerFilter = e.target.value;
-      renderContainers();
     });
 
     // Setup container run button
@@ -419,8 +444,21 @@
 
   // ─── Container Management ───────────────────────────────────────────
 
+  /**
+   * Show a loading spinner inside a list element, replacing its current content.
+   * @param {string} listId - The id of the .docker-list element
+   * @param {string} label - Text to show next to the spinner
+   */
+  function showListLoading(listId, label) {
+    var el = shadow.getElementById(listId);
+    if (el) {
+      el.innerHTML = '<div class="docker-loading"><div class="docker-spinner"></div><span>' + escapeHtml(label) + '</span></div>';
+    }
+  }
+
   async function loadContainers() {
     updateStatus('loading');
+    showListLoading('container-list', 'Loading containers...');
     const output = await dockerCommand('ps -a --format "{{.ID}}|{{.Names}}|{{.Image}}|{{.Status}}|{{.Ports}}"');
     if (!output) {
       state.containers = [];
@@ -589,34 +627,136 @@
 
   // ─── Part 2: Container Actions ────────────────────────────────────────
 
+  /**
+   * Visually mark a container row as transitioning (loading).
+   * Disables action buttons and shows a spinning indicator.
+   */
+  function setRowLoading(id, isLoading) {
+    const row = containerListEl?.querySelector('.docker-row[data-id="' + id + '"]');
+    if (!row) return;
+
+    if (isLoading) {
+      row.classList.add('transitioning');
+      // Disable all action buttons on the row
+      row.querySelectorAll('.docker-action-btn').forEach(function(btn) {
+        btn.disabled = true;
+      });
+      // Swap the status dot to a spinner
+      var statusDot = row.querySelector('.docker-row-status');
+      if (statusDot) {
+        statusDot.classList.add('transitioning');
+      }
+    } else {
+      row.classList.remove('transitioning');
+      row.querySelectorAll('.docker-action-btn').forEach(function(btn) {
+        btn.disabled = false;
+      });
+      var statusDot = row.querySelector('.docker-row-status');
+      if (statusDot) {
+        statusDot.classList.remove('transitioning');
+      }
+    }
+  }
+
   async function startContainer(id) {
-    await dockerCommand('start ' + id);
-    await loadContainers();
+    var container = state.containers.find(function(c) { return c.id === id; });
+    var name = container ? container.name : id.substring(0, 12);
+
+    setRowLoading(id, true);
+    updateStatus('loading');
+    getToast().show('Starting ' + name + '...', 'info');
+
+    var result = await dockerCommand('start ' + id);
+    setRowLoading(id, false);
+
+    if (result !== null) {
+      getToast().show(name + ' started', 'success');
+      await loadContainers();
+    } else {
+      getToast().show('Failed to start ' + name, 'error');
+      await loadContainers();
+    }
   }
 
   async function stopContainer(id) {
-    await dockerCommand('stop ' + id);
-    await loadContainers();
+    var container = state.containers.find(function(c) { return c.id === id; });
+    var name = container ? container.name : id.substring(0, 12);
+
+    setRowLoading(id, true);
+    updateStatus('loading');
+    getToast().show('Stopping ' + name + '...', 'info');
+
+    var result = await dockerCommand('stop ' + id);
+    setRowLoading(id, false);
+
+    if (result !== null) {
+      getToast().show(name + ' stopped', 'success');
+      await loadContainers();
+    } else {
+      getToast().show('Failed to stop ' + name, 'error');
+      await loadContainers();
+    }
   }
 
   async function restartContainer(id) {
-    await dockerCommand('restart ' + id);
-    await loadContainers();
+    var container = state.containers.find(function(c) { return c.id === id; });
+    var name = container ? container.name : id.substring(0, 12);
+
+    setRowLoading(id, true);
+    updateStatus('loading');
+    getToast().show('Restarting ' + name + '...', 'info');
+
+    var result = await dockerCommand('restart ' + id);
+    setRowLoading(id, false);
+
+    if (result !== null) {
+      getToast().show(name + ' restarted', 'success');
+      await loadContainers();
+    } else {
+      getToast().show('Failed to restart ' + name, 'error');
+      await loadContainers();
+    }
   }
 
   async function removeContainer(id) {
-    const container = state.containers.find(c => c.id === id);
-    const name = container ? container.name : id;
+    var container = state.containers.find(function(c) { return c.id === id; });
+    var name = container ? container.name : id;
 
-    // Simple confirm
-    if (!confirm('Remove container "' + name + '"?')) return;
+    // Use TUI modal for confirmation
+    var confirmed = await new Promise(function(resolve) {
+      var modal = api.ui.modal({
+        title: 'Remove Container',
+        content: '<p class="tui-modal-message">Remove container "' + escapeHtml(name) + '"? This cannot be undone.</p>',
+        buttons: [
+          { label: 'Cancel', variant: 'default', onClick: function(m) { m.close(); resolve(false); } },
+          { label: 'Remove', variant: 'danger', onClick: function(m) { m.close(); resolve(true); } }
+        ]
+      });
+      modal.open();
+    });
+
+    if (!confirmed) return;
+
+    setRowLoading(id, true);
+    updateStatus('loading');
+    getToast().show('Removing ' + name + '...', 'info');
 
     // Stop if running
     if (container && container.state === 'running') {
       await dockerCommand('stop ' + id);
     }
-    await dockerCommand('rm ' + id);
-    await loadContainers();
+
+    var result = await dockerCommand('rm ' + id);
+    setRowLoading(id, false);
+
+    if (result !== null) {
+      getToast().show(name + ' removed', 'success');
+      closeDetail();
+      await loadContainers();
+    } else {
+      getToast().show('Failed to remove ' + name, 'error');
+      await loadContainers();
+    }
   }
 
   // ─── Part 2: Open Shell in Terminal Plugin ────────────────────────────
@@ -748,6 +888,7 @@
 
   async function loadImages() {
     updateStatus('loading');
+    showListLoading('image-list', 'Loading images...');
     const output = await dockerCommand('images --format "{{.ID}}|{{.Repository}}|{{.Tag}}|{{.Size}}"');
     if (!output) {
       state.images = [];
@@ -927,6 +1068,7 @@
 
   async function loadNetworks() {
     updateStatus('loading');
+    showListLoading('network-list', 'Loading networks...');
     const output = await dockerCommand('network ls --format "{{.ID}}|{{.Name}}|{{.Driver}}|{{.Scope}}"');
     if (!output) {
       state.networks = [];
@@ -1031,12 +1173,7 @@
           </div>
           <div class="docker-form-group">
             <label class="docker-form-label">Driver</label>
-            <select class="tui-select" id="network-driver">
-              <option value="bridge" selected>bridge</option>
-              <option value="overlay">overlay</option>
-              <option value="macvlan">macvlan</option>
-              <option value="ipvlan">ipvlan</option>
-            </select>
+            <div id="network-driver-wrapper"></div>
           </div>
         </div>
         <div class="docker-modal-footer">
@@ -1048,6 +1185,19 @@
 
     shadow.querySelector('.docker-container').appendChild(overlay);
 
+    // Create driver select using TUI select factory
+    const driverWrapper = overlay.querySelector('#network-driver-wrapper');
+    const driverSelect = api.ui.select({
+      options: [
+        { value: 'bridge', label: 'bridge' },
+        { value: 'overlay', label: 'overlay' },
+        { value: 'macvlan', label: 'macvlan' },
+        { value: 'ipvlan', label: 'ipvlan' }
+      ],
+      value: 'bridge'
+    });
+    driverWrapper.appendChild(driverSelect);
+
     overlay.querySelector('#network-cancel').addEventListener('click', () => overlay.remove());
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) overlay.remove();
@@ -1055,7 +1205,7 @@
 
     overlay.querySelector('#network-submit').addEventListener('click', async () => {
       const name = overlay.querySelector('#network-name').value.trim();
-      const driver = overlay.querySelector('#network-driver').value;
+      const driver = driverSelect.value;
 
       if (!name) {
         alert('Please enter a network name');
@@ -1084,6 +1234,7 @@
 
   async function loadVolumes() {
     updateStatus('loading');
+    showListLoading('volume-list', 'Loading volumes...');
     const output = await dockerCommand('volume ls --format "{{.Name}}|{{.Driver}}|{{.Mountpoint}}"');
     if (!output) {
       state.volumes = [];

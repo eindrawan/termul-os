@@ -9,8 +9,8 @@
 
   // Elements
   let statusEl, cpuValueEl, cpuBarEl, cpuCoresEl;
-  let memoryValueEl, memoryBarEl, memoryTotalEl;
-  let loadAvgEl, diskValueEl, diskBarEl, diskMountEl;
+  let memoryValueEl, memoryBarEl, memoryTotalEl, memoryAvailableValueEl;
+  let loadAvgEl, diskValueEl, diskBarEl, diskMountEl, diskAvailableValueEl;
   let connectedHostEl;
 
   PLUGIN_LIFECYCLE.onMount(function() {
@@ -21,10 +21,12 @@
     memoryValueEl = shadow.getElementById('memory-value');
     memoryBarEl = shadow.getElementById('memory-bar');
     memoryTotalEl = shadow.getElementById('memory-total');
+    memoryAvailableValueEl = shadow.getElementById('memory-available-value');
     loadAvgEl = shadow.getElementById('load-avg');
     diskValueEl = shadow.getElementById('disk-value');
     diskBarEl = shadow.getElementById('disk-bar');
     diskMountEl = shadow.getElementById('disk-mount');
+    diskAvailableValueEl = shadow.getElementById('disk-available-value');
     connectedHostEl = shadow.getElementById('connected-host');
 
     // Set connected host
@@ -148,6 +150,9 @@
       var totalGB = formatKB(totalKB);
       memoryTotalEl.textContent = usedGB + ' / ' + totalGB;
     }
+    if (memoryAvailableValueEl) {
+      memoryAvailableValueEl.textContent = availKB > 0 ? formatKB(availKB) : '--';
+    }
 
     // Load Average
     if (loadAvgEl) {
@@ -173,6 +178,9 @@
       }
       if (diskMountEl) {
         diskMountEl.textContent = formatBytes(diskUsedBytes) + ' / ' + formatBytes(diskTotalBytes);
+      }
+      if (diskAvailableValueEl) {
+        diskAvailableValueEl.textContent = diskAvailBytes > 0 ? formatBytes(diskAvailBytes) : '--';
       }
     }
   }

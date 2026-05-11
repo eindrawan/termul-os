@@ -55,6 +55,47 @@
   margin: 0;
 }
 
+.monitor-card-row {
+  display: flex;
+  align-items: stretch;
+  gap: 16px;
+}
+
+.monitor-card-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.monitor-available {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-width: 90px;
+  padding: 10px 14px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.08));
+  border-radius: 8px;
+  gap: 4px;
+}
+
+.monitor-available-label {
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.5));
+}
+
+.monitor-available-value {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--tui-accent-secondary, #60cdff);
+  font-family: var(--tui-font-mono, 'Cascadia Code', 'Fira Code', monospace);
+}
+
 .monitor-info-detail span {
   color: var(--tui-accent-secondary, #60cdff);
   font-weight: 500;

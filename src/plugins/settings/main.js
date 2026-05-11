@@ -271,19 +271,29 @@
 
     var clearBtn = shadow.getElementById('clear-profiles');
     if (clearBtn) {
-      addEventListener(clearBtn, 'click', async function() {
-        if (confirm('Are you sure you want to clear all saved profiles?')) {
-          try {
-            var profiles = await window.termulAPI.profiles.getAll();
-            for (var i = 0; i < profiles.length; i++) {
-              await window.termulAPI.profiles.delete(profiles[i].id);
-            }
-            alert('All profiles cleared');
-          } catch (err) {
-            alert('Failed to clear profiles: ' + err.message);
-          }
-        }
+      addEventListener(clearBtn, 'click', function() {
+        var modal = api.ui.modal({
+          title: 'Clear Saved Profiles',
+          content: '<p class="tui-modal-message">Are you sure you want to clear all saved profiles?</p>',
+          buttons: [
+            { label: 'Cancel', variant: 'default', onClick: function(m) { m.close(); } },
+            { label: 'Clear All', variant: 'danger', onClick: function(m) { m.close(); doClearProfiles(); } }
+          ]
+        });
+        modal.open();
       });
+    }
+  }
+
+  async function doClearProfiles() {
+    try {
+      var profiles = await window.termulAPI.profiles.getAll();
+      for (var i = 0; i < profiles.length; i++) {
+        await window.termulAPI.profiles.delete(profiles[i].id);
+      }
+      api.ui.toast().show('All profiles cleared', 'success');
+    } catch (err) {
+      api.ui.toast().show('Failed to clear profiles: ' + err.message, 'error');
     }
   }
 
@@ -453,18 +463,31 @@
 
     // Uninstall buttons
     pluginListEl.querySelectorAll('.tui-btn-danger').forEach(function(btn) {
-      addEventListener(btn, 'click', async function() {
+      addEventListener(btn, 'click', function() {
         var dirName = btn.dataset.plugin;
-        if (confirm('Are you sure you want to uninstall this plugin?')) {
-          var result = await window.PluginLoader.uninstall(dirName);
-          if (result.success) {
-            initPluginsSection();
-          } else {
-            alert(result.error);
-          }
-        }
+        var modal = api.ui.modal({
+          title: 'Uninstall Plugin',
+          content: '<p class="tui-modal-message">Are you sure you want to uninstall this plugin?</p>',
+          buttons: [
+            { label: 'Cancel', variant: 'default', onClick: function(m) { m.close(); } },
+            { label: 'Uninstall', variant: 'danger', onClick: function(m) {
+              m.close();
+              doUninstallPlugin(dirName);
+            }}
+          ]
+        });
+        modal.open();
       });
     });
+  }
+
+  async function doUninstallPlugin(dirName) {
+    var result = await window.PluginLoader.uninstall(dirName);
+    if (result.success) {
+      initPluginsSection();
+    } else {
+      api.ui.toast().show(result.error || 'Uninstall failed', 'error');
+    }
   }
 
   function adjustColor(color, amount) {

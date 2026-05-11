@@ -10,6 +10,7 @@
   font-size: 13px;
   line-height: 1.4;
   color: #cccccc;
+  position: relative;
 }
 
 /* Override toolbar for terminal look */
@@ -56,4 +57,34 @@
   /* Do NOT set overflow-y: hidden — xterm needs native scroll to show
      the full scrollback buffer.  The viewport's height is managed by
      FitAddon which keeps it in sync with the container. */
+}
+
+/* ─── Context Menu ──────────────────────────────────────────────────── */
+
+/* Override dropdown position for context menu — positioned by JS */
+.tui-context-menu {
+  position: absolute;
+  display: block;
+  z-index: 9999;
+}
+
+/* Disabled menu item */
+.tui-dropdown-item-disabled {
+  opacity: 0.4;
+  cursor: default;
+  pointer-events: none;
+}
+
+.tui-dropdown-item-disabled:hover {
+  background: transparent;
+}
+
+/* Shortcut hint in context menu */
+.tui-dropdown-shortcut {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+  opacity: 0.7;
+  white-space: nowrap;
+  padding-left: 16px;
 }

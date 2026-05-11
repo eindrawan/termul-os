@@ -608,7 +608,6 @@ input {
   -webkit-appearance: none;
   cursor: pointer;
   position: relative;
-  top: 4px;
   margin: 0;
   flex-shrink: 0;
   box-sizing: border-box;
@@ -1058,7 +1057,7 @@ input {
   gap: var(--space-sm);
 }
 
-.tab-picker-form input {
+.tab-picker-form input:not([type="radio"]):not([type="checkbox"]) {
   width: 100%;
   padding: var(--space-sm) var(--space-md);
   background: var(--bg-glass);

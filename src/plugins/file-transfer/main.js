@@ -73,11 +73,134 @@
     return getProtocol() === 'ftp';
   }
 
+  // ─── Path Persistence (Profile-Specific Settings) ───────────────────────
+
+  /**
+   * Get profile-specific settings key for local path.
+   */
+  function getLocalPathKey() {
+    var profile = api.profile;
+    if (profile && profile.id) {
+      return 'fileTransfer:lastLocalPath:' + profile.id;
+    }
+    return 'fileTransfer:lastLocalPath';
+  }
+
+  /**
+   * Get profile-specific settings key for remote path.
+   */
+  function getRemotePathKey() {
+    var profile = api.profile;
+    if (profile && profile.id) {
+      return 'fileTransfer:lastRemotePath:' + profile.id;
+    }
+    return 'fileTransfer:lastRemotePath';
+  }
+
+  /**
+   * Save the last local path to settings.
+   */
+  async function saveLocalPath(path) {
+    try {
+      await window.termulAPI.settings.set(getLocalPathKey(), path);
+    } catch (e) {
+      console.warn('[FileTransfer] Failed to save local path:', e);
+    }
+  }
+
+  /**
+   * Save the last remote path to settings.
+   */
+  async function saveRemotePath(path) {
+    try {
+      await window.termulAPI.settings.set(getRemotePathKey(), path);
+    } catch (e) {
+      console.warn('[FileTransfer] Failed to save remote path:', e);
+    }
+  }
+
+  /**
+   * Load the last local path from settings.
+   */
+  async function loadSavedLocalPath() {
+    try {
+      var saved = await window.termulAPI.settings.get(getLocalPathKey(), null);
+      return saved;
+    } catch (e) {
+      console.warn('[FileTransfer] Failed to load local path:', e);
+      return null;
+    }
+  }
+
+  /**
+   * Load the last remote path from settings.
+   */
+  async function loadSavedRemotePath() {
+    try {
+      var saved = await window.termulAPI.settings.get(getRemotePathKey(), null);
+      return saved;
+    } catch (e) {
+      console.warn('[FileTransfer] Failed to load remote path:', e);
+      return null;
+    }
+  }
+
   // ─── DOM References (resolved in onMount) ───────────────────────────
   var els = {};
 
-  // ─── Prompt Modal ───────────────────────────────────────────────────
-  var modalResolve = null;
+  // ─── Prompt Modal (TuiModal-based) ──────────────────────────────────
+
+  function promptUser(title, label, defaultValue) {
+    return new Promise(function (resolve) {
+      var modal = api.ui.modal({
+        title: title,
+        content:
+          '<div class="tui-modal-message">' + escapeHtml(label) + '</div>' +
+          '<input type="text" class="tui-input" id="ft-prompt-input" style="width:100%;margin-top:8px;">',
+        buttons: [
+          { label: 'Cancel', variant: 'default', onClick: function (m) { m.close(); resolve(null); } },
+          { label: 'OK', variant: 'primary', onClick: function (m) {
+            var input = m.el.querySelector('#ft-prompt-input');
+            m.close();
+            resolve(input ? input.value.trim() : '');
+          }}
+        ]
+      });
+      modal.open();
+      setTimeout(function () {
+        var input = modal.el.querySelector('#ft-prompt-input');
+        if (input) {
+          input.value = defaultValue || '';
+          input.focus();
+          input.select();
+          input.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+              var okBtn = modal.el.querySelector('.tui-btn-primary');
+              if (okBtn) okBtn.click();
+            }
+            if (e.key === 'Escape') {
+              var cancelBtn = modal.el.querySelector('.tui-btn-default');
+              if (cancelBtn) cancelBtn.click();
+            }
+          });
+        }
+      }, 50);
+    });
+  }
+
+  function confirmUser(title, message) {
+    return new Promise(function (resolve) {
+      var modal = api.ui.modal({
+        title: title,
+        content: '<p class="tui-modal-message">' + escapeHtml(message) + '</p>',
+        buttons: [
+          { label: 'Cancel', variant: 'default', onClick: function (m) { m.close(); resolve(false); } },
+          { label: 'Confirm', variant: 'danger', onClick: function (m) { m.close(); resolve(true); } }
+        ]
+      });
+      modal.open();
+    });
+  }
 
   // ─── Context Menu ────────────────────────────────────────────────────
   var ctxVisible = false;
@@ -181,13 +304,7 @@
     els.queueList = shadow.getElementById('ft-queue-list');
     els.queueCount = shadow.getElementById('ft-queue-count');
 
-    // Modal elements
-    els.modalBackdrop = shadow.getElementById('ft-modal-backdrop');
-    els.modalTitle = shadow.getElementById('ft-modal-title');
-    els.modalLabel = shadow.getElementById('ft-modal-label');
-    els.modalInput = shadow.getElementById('ft-modal-input');
-    els.modalOk = shadow.getElementById('ft-modal-ok');
-    els.modalCancel = shadow.getElementById('ft-modal-cancel');
+    // Modal events — no longer needed (using api.ui.modal)
 
     // Context menu elements
     els.ctx = shadow.getElementById('ft-ctx');
@@ -196,6 +313,8 @@
     els.ctxDownload = shadow.getElementById('ft-ctx-download');
     els.ctxNewFile = shadow.getElementById('ft-ctx-new-file');
     els.ctxNewFolder = shadow.getElementById('ft-ctx-new-folder');
+    els.ctxRename = shadow.getElementById('ft-ctx-rename');
+    els.ctxDuplicate = shadow.getElementById('ft-ctx-duplicate');
     els.ctxDelete = shadow.getElementById('ft-ctx-delete');
 
     // Bind events
@@ -285,13 +404,7 @@
     addEventListener(els.localPane, 'click', function () { setActivePane('local'); });
     addEventListener(els.remotePane, 'click', function () { setActivePane('remote'); });
 
-    // Modal events
-    addEventListener(els.modalOk, 'click', modalOk);
-    addEventListener(els.modalCancel, 'click', modalCancel);
-    addEventListener(els.modalInput, 'keydown', function (e) {
-      if (e.key === 'Enter') modalOk();
-      if (e.key === 'Escape') modalCancel();
-    });
+    // Modal events — no longer needed (using api.ui.modal)
 
     // Context menu — right-click on file body areas
     addEventListener(els.localBody, 'contextmenu', function (e) { handleContextMenu(e, 'local'); });
@@ -299,6 +412,8 @@
 
     // Context menu — item clicks
     addEventListener(els.ctxOpen, 'click', function () { hideCtx(); openSelectedFile(); });
+    addEventListener(els.ctxRename, 'click', function () { hideCtx(); renameSelectedItem(); });
+    addEventListener(els.ctxDuplicate, 'click', function () { hideCtx(); duplicateSelected(); });
     addEventListener(els.ctxUpload, 'click', function () { hideCtx(); uploadSelected(); });
     addEventListener(els.ctxDownload, 'click', function () { hideCtx(); downloadSelected(); });
     addEventListener(els.ctxNewFile, 'click', function () { hideCtx(); addNewFile(); });
@@ -310,9 +425,10 @@
       if (ctxVisible && !els.ctx.contains(e.target)) hideCtx();
     });
 
-    // Dismiss context menu on Escape
+    // Dismiss context menu on Escape, F2 to rename
     addEventListener(shadow.querySelector('.ft-container'), 'keydown', function (e) {
       if (e.key === 'Escape' && ctxVisible) { hideCtx(); e.preventDefault(); }
+      if (e.key === 'F2') { e.preventDefault(); renameSelectedItem(); }
     });
 
     // Listen for SFTP progress
@@ -437,50 +553,6 @@
     els.deleteBtn.disabled = !hasSelection;
   }
 
-  // ─── Prompt Modal ───────────────────────────────────────────────────
-
-  function promptUser(title, label, defaultValue) {
-    return new Promise(function (resolve) {
-      modalResolve = resolve;
-      els.modalTitle.textContent = title;
-      els.modalLabel.textContent = label;
-      els.modalInput.value = defaultValue || '';
-      els.modalInput.style.display = '';
-      els.modalLabel.style.display = '';
-      els.modalBackdrop.classList.add('tui-modal-open');
-      els.modalInput.focus();
-      els.modalInput.select();
-    });
-  }
-
-  function confirmUser(title, message) {
-    return new Promise(function (resolve) {
-      modalResolve = resolve;
-      els.modalTitle.textContent = title;
-      els.modalLabel.textContent = message;
-      els.modalInput.style.display = 'none';
-      els.modalBackdrop.classList.add('tui-modal-open');
-      els.modalOk.focus();
-    });
-  }
-
-  function modalOk() {
-    var isConfirm = els.modalInput.style.display === 'none';
-    els.modalBackdrop.classList.remove('tui-modal-open');
-    if (modalResolve) {
-      modalResolve(isConfirm ? true : els.modalInput.value.trim());
-      modalResolve = null;
-    }
-  }
-
-  function modalCancel() {
-    els.modalBackdrop.classList.remove('tui-modal-open');
-    if (modalResolve) {
-      modalResolve(null);
-      modalResolve = null;
-    }
-  }
-
   // ─── Context Menu ────────────────────────────────────────────────────
 
   function handleContextMenu(e, pane) {
@@ -528,6 +600,15 @@
     }
     els.ctxOpen.disabled = !canOpen;
     els.ctxOpen.style.display = '';
+
+    // "Rename" — show when exactly one item is selected
+    var canRename = selectedNames.length === 1;
+    els.ctxRename.disabled = !canRename;
+    els.ctxRename.style.display = '';
+
+    // "Duplicate" — enabled when at least one item is selected
+    els.ctxDuplicate.disabled = !hasSelection;
+    els.ctxDuplicate.style.display = '';
 
     els.ctxUpload.disabled = !hasLocalItems;
     els.ctxDownload.disabled = !hasRemoteItems;
@@ -579,10 +660,29 @@
   async function initLocal() {
     try {
       userDirs = await window.termulAPI.fs.userDirs();
-      localPath = userDirs.home || '/';
     } catch (e) {
-      localPath = '/';
+      userDirs = { home: '/' };
     }
+
+    // Try to load saved path first
+    var savedPath = await loadSavedLocalPath();
+    if (savedPath) {
+      // Validate saved path exists by attempting to load it
+      try {
+        var result = await window.termulAPI.fs.listDir(savedPath);
+        if (result.success) {
+          localPath = savedPath;
+          await loadLocalDir(localPath);
+          return;
+        }
+      } catch (e) {
+        // Saved path is invalid, fall back to home
+        console.warn('[FileTransfer] Saved local path invalid, using home:', e);
+      }
+    }
+
+    // Fall back to home directory
+    localPath = userDirs.home || '/';
     await loadLocalDir(localPath);
   }
 
@@ -606,6 +706,9 @@
       var fileCount = localEntries.filter(function (e) { return e.isFile; }).length;
       var dirCount = localEntries.filter(function (e) { return e.isDirectory; }).length;
       setLocalStatus(dirCount + ' folders, ' + fileCount + ' files');
+
+      // Save path for next time
+      await saveLocalPath(localPath);
     } catch (e) {
       showLocalError(e.message);
     }
@@ -618,7 +721,7 @@
     var html = '';
 
     // Parent directory entry
-    html += '<div class="ft-row ft-parent-dir" data-action="parent-local">' +
+    html += '<div class="ft-row ft-parent-dir" tabindex="0" data-action="parent-local">' +
       '<div class="ft-row-name"><div class="ft-icon ft-icon-parent">' + ICONS.parent + '</div><span class="ft-row-name-text">..</span></div>' +
       '<div class="ft-row-size"></div><div class="ft-row-date"></div></div>';
 
@@ -629,7 +732,7 @@
       var sizeStr = entry.isFile ? formatSize(entry.size) : '';
       var dateStr = entry.modifyTime ? formatDate(entry.modifyTime) : '';
 
-      html += '<div class="ft-row" data-name="' + escapeAttr(entry.name) + '" data-index="' + i + '">' +
+      html += '<div class="ft-row" tabindex="0" data-name="' + escapeAttr(entry.name) + '" data-index="' + i + '">' +
         '<div class="ft-row-name"><div class="ft-icon ' + iconClass + '">' + iconSvg + '</div>' +
         '<span class="ft-row-name-text">' + escapeHtml(entry.name) + '</span></div>' +
         '<div class="ft-row-size">' + sizeStr + '</div>' +
@@ -779,15 +882,39 @@
       els.remotePath.value = '';
       return;
     }
-    try {
-      var result;
-      if (isFtp()) {
-        result = await window.termulAPI.ftp.home(api.connectionId);
-      } else {
-        result = await window.termulAPI.ssh.sftpHome(api.connectionId);
+
+    // Try to load saved path first
+    var savedPath = await loadSavedRemotePath();
+    if (savedPath) {
+      // Validate saved path exists by attempting to load it
+      try {
+        var result;
+        if (isFtp()) {
+          result = await window.termulAPI.ftp.listDir(api.connectionId, savedPath);
+        } else {
+          result = await window.termulAPI.ssh.sftpListDir(api.connectionId, savedPath);
+        }
+        if (result.success) {
+          remotePath = savedPath;
+          await loadRemoteDir(remotePath);
+          return;
+        }
+      } catch (e) {
+        // Saved path is invalid, fall back to home
+        console.warn('[FileTransfer] Saved remote path invalid, using home:', e);
       }
-      if (result.success) {
-        remotePath = result.path;
+    }
+
+    // Fall back to home directory
+    try {
+      var homeResult;
+      if (isFtp()) {
+        homeResult = await window.termulAPI.ftp.home(api.connectionId);
+      } else {
+        homeResult = await window.termulAPI.ssh.sftpHome(api.connectionId);
+      }
+      if (homeResult.success) {
+        remotePath = homeResult.path;
       } else {
         remotePath = '/';
       }
@@ -826,6 +953,9 @@
       var fileCount = remoteEntries.filter(function (e) { return e.isFile; }).length;
       var dirCount = remoteEntries.filter(function (e) { return e.isDirectory; }).length;
       setRemoteStatus(dirCount + ' folders, ' + fileCount + ' files');
+
+      // Save path for next time
+      await saveRemotePath(remotePath);
     } catch (e) {
       showRemoteError(e.message);
     }
@@ -838,7 +968,7 @@
     var html = '';
 
     // Parent directory entry
-    html += '<div class="ft-row ft-parent-dir" data-action="parent-remote">' +
+    html += '<div class="ft-row ft-parent-dir" tabindex="0" data-action="parent-remote">' +
       '<div class="ft-row-name"><div class="ft-icon ft-icon-parent">' + ICONS.parent + '</div><span class="ft-row-name-text">..</span></div>' +
       '<div class="ft-row-size"></div><div class="ft-row-date"></div></div>';
 
@@ -849,7 +979,7 @@
       var sizeStr = entry.isFile ? formatSize(entry.size) : '';
       var dateStr = entry.modifyTime ? formatDate(entry.modifyTime) : '';
 
-      html += '<div class="ft-row" data-name="' + escapeAttr(entry.name) + '" data-index="' + i + '">' +
+      html += '<div class="ft-row" tabindex="0" data-name="' + escapeAttr(entry.name) + '" data-index="' + i + '">' +
         '<div class="ft-row-name"><div class="ft-icon ' + iconClass + '">' + iconSvg + '</div>' +
         '<span class="ft-row-name-text">' + escapeHtml(entry.name) + '</span></div>' +
         '<div class="ft-row-size">' + sizeStr + '</div>' +
@@ -1149,6 +1279,7 @@
 
   /**
    * Ensure a remote directory exists. Uses mkdir -p via SSH exec or ftp.mkdir.
+   * Includes a small delay to avoid overwhelming the server with channel requests.
    */
   async function ensureRemoteDir(dirPath) {
     try {
@@ -1158,7 +1289,10 @@
       } else {
         // Use mkdir -p via SSH exec for robustness (handles existing dirs and nested paths)
         var esc = shellQuote(dirPath);
-        return await window.termulAPI.ssh.exec(api.connectionId, 'mkdir -p ' + esc);
+        var result = await window.termulAPI.ssh.exec(api.connectionId, 'mkdir -p ' + esc);
+        // Add a small delay to avoid channel exhaustion
+        await new Promise(function(resolve) { setTimeout(resolve, 50); });
+        return result;
       }
     } catch (e) {
       // Non-fatal — dir may already exist
@@ -1295,6 +1429,36 @@
     transferQueue.push(transfer);
     renderQueueItem(transfer);
     updateQueueCount();
+    // Ensure queue section is expanded when items are added
+    var queueSection = shadow.querySelector('.ft-queue-section');
+    if (queueSection) {
+      queueSection.classList.remove('ft-collapsed');
+    }
+  }
+
+  /**
+   * Remove a transfer's UI element after a delay.
+   * This keeps completed/failed transfers visible briefly.
+   * Note: The transfer is already removed from the queue array, this just removes the UI.
+   */
+  function removeTransferAfterDelay(transferId, delayMs) {
+    setTimeout(function() {
+      // Just remove the UI element - transfer is already removed from queue array
+      var queueItem = shadow.getElementById('queue-' + transferId);
+      if (queueItem) {
+        queueItem.remove();
+      }
+      // Show empty message if no more visible items and queue is empty
+      if (transferQueue.length === 0 && els.queueList) {
+        var hasVisibleItems = els.queueList.querySelector('.ft-queue-item');
+        if (!hasVisibleItems) {
+          var emptyMsg = els.queueList.querySelector('.ft-queue-empty');
+          if (!emptyMsg) {
+            els.queueList.innerHTML = '<div class="ft-queue-empty">No active transfers</div>';
+          }
+        }
+      }
+    }, delayMs);
   }
 
   function renderQueueItem(transfer) {
@@ -1315,22 +1479,54 @@
 
     // Remove empty message if present
     var emptyMsg = els.queueList.querySelector('.ft-queue-empty');
-    if (emptyMsg) emptyMsg.remove();
+    if (emptyMsg) {
+      emptyMsg.remove();
+    }
 
     els.queueList.insertAdjacentHTML('beforeend', html);
+  }
+
+  /**
+   * Mark a transfer item as complete or failed with visual styling
+   */
+  function markTransferDone(transferId, status) {
+    var queueItem = shadow.getElementById('queue-' + transferId);
+    if (queueItem) {
+      if (status === 'complete') {
+        queueItem.classList.add('ft-completed');
+      } else if (status === 'failed') {
+        queueItem.classList.add('ft-failed');
+      }
+    }
   }
 
   async function processQueue() {
     if (isTransferring) return;
     isTransferring = true;
 
+    // NOTE: We no longer pre-test the connection before starting transfers.
+    // The connection test was causing issues because:
+    // 1. It used ssh.exec which requires a full shell (not always available)
+    // 2. sftpStat might fail on some servers
+    // 3. The actual transfer functions (sftpUpload/sftpDownload) have better error handling
+    // Let the transfers fail naturally with specific error messages instead.
+
     while (transferQueue.length > 0) {
       var transfer = transferQueue[0];
 
+      // Skip transfers that are already complete or failed (shouldn't happen, but safety check)
+      if (transfer.status === 'complete' || transfer.status === 'failed') {
+        transferQueue.shift();
+        continue;
+      }
+
       // Update status to active
+      transfer.status = 'transferring';
       updateQueueItemStatus(transfer.id, 'Transferring...', '');
+      updateQueueCount();
 
       try {
+        console.log('[FileTransfer] Starting transfer:', transfer.type, transfer.source, '->', transfer.dest, 'id:', transfer.id);
         var result;
         if (transfer.type === 'upload') {
           if (isFtp()) {
@@ -1353,28 +1549,106 @@
             );
           }
         }
-
         if (result.success) {
+          transfer.status = 'complete';
           updateQueueItemStatus(transfer.id, 'Complete', 'ft-complete');
           updateQueueItemBar(transfer.id, 100, 'ft-complete');
           updateQueueItemPercent(transfer.id, '100%');
+          markTransferDone(transfer.id, 'complete');
+          // Keep in queue for 5 seconds before removing
+          removeTransferAfterDelay(transfer.id, 5000);
         } else {
-          updateQueueItemStatus(transfer.id, result.error || 'Failed', 'ft-error');
-          updateQueueItemBar(transfer.id, transfer.percent, 'ft-error');
+          transfer.status = 'failed';
+          // Check if error is connection-related
+          var errorMsg = result.error || 'Failed';
+          if (errorMsg.includes('Connection') || errorMsg.includes('channel') || errorMsg.includes('closed')) {
+            // Connection error - abort remaining transfers
+            updateQueueItemStatus(transfer.id, errorMsg, 'ft-error');
+            updateQueueItemBar(transfer.id, transfer.percent || 0, 'ft-error');
+            markTransferDone(transfer.id, 'failed');
+            // Keep in queue for 5 seconds before removing
+            removeTransferAfterDelay(transfer.id, 5000);
+
+            // Mark remaining transfers as failed
+            var remainingCount = transferQueue.length;
+            for (var i = 0; i < remainingCount; i++) {
+              var remaining = transferQueue[0]; // Always take from front since we're shifting
+              remaining.status = 'failed';
+              updateQueueItemStatus(remaining.id, 'Connection lost', 'ft-error');
+              updateQueueItemBar(remaining.id, remaining.percent || 0, 'ft-error');
+              markTransferDone(remaining.id, 'failed');
+              // Schedule removal for each
+              removeTransferAfterDelay(remaining.id, 5000);
+              transferQueue.shift(); // Remove from queue to prevent endless loop
+            }
+            updateQueueCount();
+            break;
+          } else {
+            // Display error - show clearer message for channel errors
+            if (errorMsg.includes('Channel open') || errorMsg.includes('open failed')) {
+              updateQueueItemStatus(transfer.id, 'Server busy - try again', 'ft-error');
+            } else {
+              updateQueueItemStatus(transfer.id, errorMsg, 'ft-error');
+            }
+            updateQueueItemBar(transfer.id, transfer.percent, 'ft-error');
+            markTransferDone(transfer.id, 'failed');
+            // Keep in queue for 5 seconds before removing
+            removeTransferAfterDelay(transfer.id, 5000);
+          }
         }
       } catch (e) {
-        updateQueueItemStatus(transfer.id, e.message || 'Error', 'ft-error');
-        updateQueueItemBar(transfer.id, transfer.percent, 'ft-error');
+        transfer.status = 'failed';
+        var catchError = e.message || 'Error';
+        // Check if error is connection-related
+        if (catchError.includes('Connection') || catchError.includes('channel') || catchError.includes('closed')) {
+          // Connection error - abort remaining transfers
+          updateQueueItemStatus(transfer.id, catchError, 'ft-error');
+          updateQueueItemBar(transfer.id, transfer.percent || 0, 'ft-error');
+          markTransferDone(transfer.id, 'failed');
+          // Keep in queue for 5 seconds before removing
+          removeTransferAfterDelay(transfer.id, 5000);
+
+          // Mark remaining transfers as failed
+          var remainingCount = transferQueue.length;
+          for (var i = 0; i < remainingCount; i++) {
+            var remaining2 = transferQueue[0]; // Always take from front since we're shifting
+            remaining2.status = 'failed';
+            updateQueueItemStatus(remaining2.id, 'Connection lost', 'ft-error');
+            updateQueueItemBar(remaining2.id, remaining2.percent || 0, 'ft-error');
+            markTransferDone(remaining2.id, 'failed');
+            // Schedule removal for each
+            removeTransferAfterDelay(remaining2.id, 5000);
+            transferQueue.shift(); // Remove from queue to prevent endless loop
+          }
+          updateQueueCount();
+          break;
+        } else {
+          // Display error - show clearer message for channel errors
+          if (catchError.includes('Channel open') || catchError.includes('open failed')) {
+            updateQueueItemStatus(transfer.id, 'Server busy - try again', 'ft-error');
+          } else {
+            updateQueueItemStatus(transfer.id, catchError, 'ft-error');
+          }
+          updateQueueItemBar(transfer.id, transfer.percent, 'ft-error');
+          markTransferDone(transfer.id, 'failed');
+          // Keep in queue for 5 seconds before removing
+          removeTransferAfterDelay(transfer.id, 5000);
+        }
       }
 
+      // Remove from queue immediately to prevent endless loop
+      // The UI element will stay visible for 5 seconds via removeTransferAfterDelay
       transferQueue.shift();
       updateQueueCount();
     }
 
     isTransferring = false;
 
-    // Refresh both panes after all transfers complete
-    refreshBoth();
+    // Refresh both panes after all active transfers complete
+    // Wait a bit for the UI to update first
+    setTimeout(function() {
+      refreshBoth();
+    }, 100);
   }
 
   function handleProgress(data) {
@@ -1411,11 +1685,19 @@
   }
 
   function updateQueueCount() {
-    var count = transferQueue.length;
-    if (els.queueCount) {
-      els.queueCount.textContent = count + ' transfer' + (count !== 1 ? 's' : '');
+    // Count only active transfers (not complete/failed)
+    var activeCount = 0;
+    for (var i = 0; i < transferQueue.length; i++) {
+      if (transferQueue[i].status === 'pending' || transferQueue[i].status === 'transferring') {
+        activeCount++;
+      }
     }
-    if (count === 0 && els.queueList) {
+    if (els.queueCount) {
+      els.queueCount.textContent = activeCount + ' transfer' + (activeCount !== 1 ? 's' : '');
+    }
+    // Only show empty message if queue array is empty AND no visible items in DOM
+    var hasVisibleItems = els.queueList ? els.queueList.querySelector('.ft-queue-item') : null;
+    if (transferQueue.length === 0 && els.queueList && !hasVisibleItems) {
       var emptyMsg = els.queueList.querySelector('.ft-queue-empty');
       if (!emptyMsg) {
         els.queueList.innerHTML = '<div class="ft-queue-empty">No active transfers</div>';
@@ -1628,6 +1910,273 @@
         } catch (e) {
           toast = api.ui.toast();
           toast.show(e.message || 'Failed to delete items', 'error');
+        }
+      }
+      loadRemoteDir(remotePath);
+    }
+  }
+
+  // ─── Open in Editor / Viewer ────────────────────────────────────────
+
+  // ─── Rename ─────────────────────────────────────────────────────────
+
+  async function renameSelectedItem() {
+    var selection = activePane === 'local' ? selectedLocal : selectedRemote;
+    var names = Object.keys(selection);
+
+    if (names.length !== 1) {
+      var toast = api.ui.toast();
+      toast.show('Select exactly one item to rename', 'info');
+      return;
+    }
+
+    var oldName = names[0];
+    var entries = activePane === 'local' ? localEntries : remoteEntries;
+    var entry = findEntryByName(entries, oldName);
+    if (!entry) return;
+
+    if (activePane === 'remote' && !api.connectionId) {
+      var toast = api.ui.toast();
+      toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
+      return;
+    }
+
+    var newName = await promptUser(
+      activePane === 'local' ? 'Rename (Local)' : 'Rename (Remote)',
+      'New name for "' + oldName + '":',
+      oldName
+    );
+    if (!newName || newName === oldName) return;
+
+    // Validate: no slashes or backslashes in name
+    if (newName.indexOf('/') !== -1 || newName.indexOf('\\') !== -1) {
+      toast = api.ui.toast();
+      toast.show('Name cannot contain slashes', 'error');
+      return;
+    }
+
+    if (activePane === 'local') {
+      var oldPath = entry.path;
+      var newPath = joinLocalPath(localPath, newName);
+      try {
+        var result = await window.termulAPI.fs.rename(oldPath, newPath);
+        if (!result || !result.success) {
+          toast = api.ui.toast();
+          toast.show((result && result.error) || 'Failed to rename', 'error');
+        } else {
+          clearLocalSelection();
+          loadLocalDir(localPath);
+          var successToast = api.ui.toast();
+          successToast.show('Renamed to "' + newName + '"', 'success');
+        }
+      } catch (e) {
+        toast = api.ui.toast();
+        toast.show(e.message || 'Failed to rename', 'error');
+      }
+    } else {
+      // Remote
+      var oldPath = entry.path;
+      var newPath = joinRemotePath(remotePath, newName);
+      try {
+        var result;
+        if (isFtp()) {
+          result = await window.termulAPI.ftp.rename(api.connectionId, oldPath, newPath);
+        } else {
+          result = await window.termulAPI.ssh.sftpRename(api.connectionId, oldPath, newPath);
+        }
+        if (!result || !result.success) {
+          toast = api.ui.toast();
+          toast.show((result && result.error) || 'Failed to rename', 'error');
+        } else {
+          clearRemoteSelection();
+          loadRemoteDir(remotePath);
+          var successToast = api.ui.toast();
+          successToast.show('Renamed to "' + newName + '"', 'success');
+        }
+      } catch (e) {
+        toast = api.ui.toast();
+        toast.show(e.message || 'Failed to rename', 'error');
+      }
+    }
+  }
+
+  // ─── Duplicate ──────────────────────────────────────────────────────
+
+  /**
+   * Check if an error message indicates an SSH channel exhaustion / closure error.
+   */
+  function isChannelError(msg) {
+    if (!msg) return false;
+    var lower = msg.toLowerCase();
+    return lower.indexOf('channel') !== -1 ||
+           lower.indexOf('open failed') !== -1 ||
+           lower.indexOf('too many') !== -1 ||
+           lower.indexOf('resource') !== -1;
+  }
+
+  /**
+   * Generate a non-conflicting duplicate name.
+   * e.g. "file.txt" → "file copy.txt", "file copy.txt" → "file copy 2.txt"
+   *      "folder" → "folder copy", "folder copy" → "folder copy 2"
+   */
+  function generateDuplicateName(originalName, existingNames) {
+    var existingSet = {};
+    for (var i = 0; i < existingNames.length; i++) {
+      existingSet[existingNames[i]] = true;
+    }
+
+    var baseName = originalName;
+    var ext = '';
+    var dotIdx = originalName.lastIndexOf('.');
+    // Only treat as an extension if there's a dot and it's not a hidden file like ".gitignore"
+    if (dotIdx > 0) {
+      baseName = originalName.substring(0, dotIdx);
+      ext = originalName.substring(dotIdx); // includes the dot
+    }
+
+    // First try: "basename copy.ext"
+    var candidate = baseName + ' copy' + ext;
+    if (!existingSet[candidate]) return candidate;
+
+    // Then try: "basename copy 2.ext", "basename copy 3.ext", etc.
+    var counter = 2;
+    while (true) {
+      candidate = baseName + ' copy ' + counter + ext;
+      if (!existingSet[candidate]) return candidate;
+      counter++;
+      // Safety limit
+      if (counter > 1000) return baseName + ' copy ' + Date.now() + ext;
+    }
+  }
+
+  async function duplicateSelected() {
+    var selection = activePane === 'local' ? selectedLocal : selectedRemote;
+    var entries = activePane === 'local' ? localEntries : remoteEntries;
+    var names = Object.keys(selection);
+
+    if (names.length === 0) {
+      var toast = api.ui.toast();
+      toast.show('Select at least one item to duplicate', 'info');
+      return;
+    }
+
+    if (activePane === 'remote' && !api.connectionId) {
+      var toast = api.ui.toast();
+      toast.show(isFtp() ? 'Not connected to FTP server' : 'Not connected to SSH server', 'error');
+      return;
+    }
+
+    // Get existing names in current directory to avoid conflicts
+    var existingNames = [];
+    for (var e = 0; e < entries.length; e++) {
+      existingNames.push(entries[e].name);
+    }
+
+    if (activePane === 'local') {
+      // Duplicate local items
+      for (var i = 0; i < names.length; i++) {
+        var entry = findEntryByName(entries, names[i]);
+        if (!entry) continue;
+
+        var newName = generateDuplicateName(entry.name, existingNames);
+        var sourcePath = entry.path;
+        var destPath = joinLocalPath(localPath, newName);
+
+        try {
+          var result;
+          if (entry.isDirectory) {
+            // For directories, use copyDir if available, otherwise use recursive approach
+            result = await window.termulAPI.fs.copyPath(sourcePath, destPath);
+          } else {
+            result = await window.termulAPI.fs.copyPath(sourcePath, destPath);
+          }
+
+          if (!result || !result.success) {
+            toast = api.ui.toast();
+            toast.show('Failed to duplicate "' + entry.name + '": ' + ((result && result.error) || 'Unknown error'), 'error');
+          } else {
+            existingNames.push(newName);
+          }
+        } catch (err) {
+          toast = api.ui.toast();
+          toast.show('Failed to duplicate "' + entry.name + '": ' + (err.message || 'Unknown error'), 'error');
+        }
+      }
+      loadLocalDir(localPath);
+    } else {
+      // Remote
+      if (isFtp()) {
+        // FTP: duplicate items one by one
+        for (var j = 0; j < names.length; j++) {
+          var entry = findEntryByName(entries, names[j]);
+          if (!entry) continue;
+
+          var newName = generateDuplicateName(entry.name, existingNames);
+
+          try {
+            var result;
+            if (entry.isDirectory) {
+              // FTP doesn't have a native copy — notify the user
+              toast = api.ui.toast();
+              toast.show('Cannot duplicate directories via FTP', 'error');
+              continue;
+            } else {
+              // Read the file content, then write to the new name
+              var readResult = await window.termulAPI.ftp.readFile(api.connectionId, entry.path);
+              if (!readResult || !readResult.success) {
+                toast = api.ui.toast();
+                toast.show('Failed to read "' + entry.name + '"', 'error');
+                continue;
+              }
+              var remoteDest = joinRemotePath(remotePath, newName);
+              result = await window.termulAPI.ftp.writeFile(api.connectionId, remoteDest, readResult.content);
+            }
+
+            if (!result || !result.success) {
+              toast = api.ui.toast();
+              toast.show('Failed to duplicate "' + entry.name + '"', 'error');
+            } else {
+              existingNames.push(newName);
+            }
+          } catch (err) {
+            toast = api.ui.toast();
+            toast.show('Failed to duplicate "' + entry.name + '": ' + (err.message || 'Unknown error'), 'error');
+          }
+        }
+      } else {
+        // SSH: use cp -r for copy, with delay between commands to avoid channel exhaustion
+        var sshPaths = [];
+        var sshEntries = [];
+        for (var k = 0; k < names.length; k++) {
+          var entry = findEntryByName(entries, names[k]);
+          if (!entry) continue;
+
+          var newName = generateDuplicateName(entry.name, existingNames);
+          var destPath = joinRemotePath(remotePath, newName);
+          sshPaths.push({ src: shellQuote(entry.path), dst: shellQuote(destPath) });
+          sshEntries.push({ entry: entry, newName: newName });
+          existingNames.push(newName);
+        }
+
+        // Execute cp commands sequentially with delay between each
+        for (var p = 0; p < sshPaths.length; p++) {
+          var cpEntry = sshEntries[p].entry;
+          var cpFlag = cpEntry.isDirectory ? '-r' : '';
+          var cpCmd = 'cp ' + cpFlag + ' ' + sshPaths[p].src + ' ' + sshPaths[p].dst;
+          try {
+            var result = await window.termulAPI.ssh.exec(api.connectionId, cpCmd);
+            if (!result || !result.success) {
+              toast = api.ui.toast();
+              toast.show('Failed to duplicate "' + cpEntry.name + '": ' + ((result && result.error) || 'Unknown error'), 'error');
+            }
+          } catch (err) {
+            toast = api.ui.toast();
+            toast.show('Failed to duplicate "' + cpEntry.name + '": ' + (err.message || 'Unknown error'), 'error');
+          }
+          // Add a delay between commands to avoid channel exhaustion
+          if (p < sshPaths.length - 1) {
+            await new Promise(function(resolve) { setTimeout(resolve, 150); });
+          }
         }
       }
       loadRemoteDir(remotePath);
