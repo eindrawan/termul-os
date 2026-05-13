@@ -131,7 +131,7 @@ class WindowManager {
       // Create a host element for the plugin's shadow DOM
       const host = document.createElement('div');
       host.className = 'plugin-host';
-      host.style.cssText = 'width:100%;height:100%;overflow:hidden;';
+      host.style.cssText = 'width:100%;height:100%;position:relative;overflow:hidden;';
       body.appendChild(host);
 
       // Create the PluginInstance

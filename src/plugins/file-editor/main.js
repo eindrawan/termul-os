@@ -146,7 +146,23 @@
   PLUGIN_LIFECYCLE.onFocus(function () {
     // Re-focus the Monaco editor when the window gains focus.
     // Without this, clicking on the editor area does not activate keyboard input.
-    if (editor) editor.focus();
+    // However, we must NOT steal focus if an overlay widget (e.g. the find widget
+    // input box) is currently focused, otherwise the user can't type in it.
+    if (editor) {
+      var activeEl = shadow.activeElement;
+      if (activeEl) {
+        // Check if the active element is inside a Monaco overlay widget
+        // (find widget, replace widget, suggestion list, etc.)
+        var widgetHost = activeEl.closest(
+          ".editor-widget, .monaco-editor .overlayWidget",
+        );
+        if (widgetHost) return; // Don't steal focus from overlay widgets
+        // Also check for input/textarea inside the find widget by class
+        if (activeEl.tagName === "INPUT" || activeEl.tagName === "TEXTAREA")
+          return;
+      }
+      editor.focus();
+    }
   });
 
   PLUGIN_LIFECYCLE.onBlur(function () {
@@ -270,6 +286,29 @@
 
     // Initial layout
     editor.layout();
+
+    // Ensure Monaco's overlay widgets (find/replace input, suggestions, etc.)
+    // don't lose focus when clicked. The window manager listens for click events
+    // on the container and calls focus() on the window, which triggers our
+    // onFocus hook -> editor.focus(). We stop propagation of mousedown AND click
+    // events originating from Monaco overlay widgets so the window manager never
+    // receives them and doesn't steal focus.
+    function shouldStopPropagation(target) {
+      // Stop for any input/textarea inside the editor area (find widget, replace, etc.)
+      if (target.tagName === "INPUT" || target.tagName === "TEXTAREA")
+        return true;
+      if (target.closest("input, textarea")) return true;
+      // Also stop for clicks on codicon buttons inside the find widget
+      if (target.closest(".editor-widget")) return true;
+      return false;
+    }
+
+    els.editorArea.addEventListener("mousedown", function (e) {
+      if (shouldStopPropagation(e.target)) e.stopPropagation();
+    });
+    els.editorArea.addEventListener("click", function (e) {
+      if (shouldStopPropagation(e.target)) e.stopPropagation();
+    });
   }
 
   // ─── File Operations ──────────────────────────────────────────────────
@@ -401,6 +440,7 @@
         originalContent: content,
         language: language,
         modified: false,
+        viewState: null,
       };
 
       openFiles.push(fileData);
@@ -677,6 +717,17 @@
   function setActiveFile(fileId) {
     if (activeFileId === fileId) return;
 
+    // Save scroll/cursor state of the current file before switching away
+    if (activeFileId && editor) {
+      var prevFile = openFiles.find(function (f) {
+        return f.id === activeFileId;
+      });
+      if (prevFile) {
+        prevFile.viewState = editor.saveViewState();
+        prevFile.content = editor.getValue();
+      }
+    }
+
     activeFileId = fileId;
     var file = openFiles.find(function (f) {
       return f.id === fileId;
@@ -698,6 +749,11 @@
         window.monaco.editor.setModelLanguage(model, file.language);
       }
       editor.setValue(file.content);
+
+      // Restore scroll position and cursor for this file
+      if (file.viewState) {
+        editor.restoreViewState(file.viewState);
+      }
     }
 
     // Update language selector

@@ -13,11 +13,12 @@
     sudoPassword: "",
     passwordSaved: false,
     detailRule: null, // selected rule for detail view
+    searchQuery: "", // current search filter text
     iptablesBin: "iptables", // resolved binary path
   };
 
   // UI element references
-  var statusEl, ruleListEl, ruleCountEl;
+  var statusEl, ruleListEl, ruleCountEl, searchEl, searchClearEl;
   var _toast = null;
 
   // Known chains per table
@@ -44,6 +45,8 @@
     statusEl = shadow.getElementById("ipt-status");
     ruleListEl = shadow.getElementById("rule-list");
     ruleCountEl = shadow.getElementById("rule-count");
+    searchEl = shadow.getElementById("ipt-search");
+    searchClearEl = shadow.getElementById("ipt-search-clear");
 
     // Table tabs
     var tableTabs = shadow.querySelectorAll(".ipt-tab");
@@ -65,6 +68,20 @@
       applyIptables,
     );
     addEventListener(shadow.getElementById("ipt-save"), "click", saveRules);
+
+    // Search / filter
+    addEventListener(searchEl, "input", function () {
+      state.searchQuery = searchEl.value.trim().toLowerCase();
+      searchClearEl.style.display = state.searchQuery ? "" : "none";
+      renderRules();
+    });
+    addEventListener(searchClearEl, "click", function () {
+      searchEl.value = "";
+      state.searchQuery = "";
+      searchClearEl.style.display = "none";
+      renderRules();
+      searchEl.focus();
+    });
 
     // Panel buttons
     addEventListener(
@@ -409,6 +426,11 @@
   function switchTable(tableName) {
     state.currentTable = tableName;
 
+    // Clear search filter on table switch
+    state.searchQuery = "";
+    if (searchEl) searchEl.value = "";
+    if (searchClearEl) searchClearEl.style.display = "none";
+
     // Update tab UI
     var tabs = shadow.querySelectorAll(".ipt-tab");
     tabs.forEach(function (t) {
@@ -428,6 +450,11 @@
 
   function switchChain(chainName) {
     state.currentChain = chainName;
+
+    // Clear search filter on chain switch
+    state.searchQuery = "";
+    if (searchEl) searchEl.value = "";
+    if (searchClearEl) searchClearEl.style.display = "none";
 
     // Update chain tab UI
     var chainTabs = shadow.querySelectorAll(".ipt-chain-tab");
@@ -717,29 +744,72 @@
   function renderRules() {
     if (!ruleListEl) return;
 
-    var count = state.rules.length;
+    var totalCount = state.rules.length;
+
+    // Filter rules by search query
+    var filtered = state.rules;
+    if (state.searchQuery) {
+      var q = state.searchQuery;
+      filtered = state.rules.filter(function (rule) {
+        var optsText = buildOptionsText(rule);
+        var haystack = (
+          rule.target +
+          " " +
+          rule.prot +
+          " " +
+          rule.source +
+          " " +
+          rule.destination +
+          " " +
+          optsText +
+          " " +
+          (rule.inputIface !== "*" ? rule.inputIface : "") +
+          " " +
+          (rule.outputIface !== "*" ? rule.outputIface : "")
+        ).toLowerCase();
+        return haystack.indexOf(q) !== -1;
+      });
+    }
+
+    var count = filtered.length;
     if (ruleCountEl) {
-      ruleCountEl.textContent = count + " rule" + (count !== 1 ? "s" : "");
+      if (state.searchQuery && count !== totalCount) {
+        ruleCountEl.textContent =
+          count + " of " + totalCount + " rule" + (totalCount !== 1 ? "s" : "");
+      } else {
+        ruleCountEl.textContent =
+          totalCount + " rule" + (totalCount !== 1 ? "s" : "");
+      }
     }
 
     if (count === 0) {
-      ruleListEl.innerHTML =
-        '<div class="ipt-empty">' +
-        '<div class="ipt-empty-icon">' +
-        '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
-        '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' +
-        "</svg>" +
-        "</div>" +
-        '<p class="ipt-empty-text">No rules in ' +
-        escapeHtml(state.currentChain) +
-        "</p>" +
-        '<p class="ipt-empty-subtext">Click "Add Rule" to create a new firewall rule</p>' +
-        "</div>";
+      if (state.searchQuery && totalCount > 0) {
+        ruleListEl.innerHTML =
+          '<div class="ipt-search-no-results">' +
+          '<p class="ipt-search-no-results-text">No rules match your filter</p>' +
+          '<span class="ipt-search-no-results-query">"' +
+          escapeHtml(state.searchQuery) +
+          '"</span>' +
+          "</div>";
+      } else {
+        ruleListEl.innerHTML =
+          '<div class="ipt-empty">' +
+          '<div class="ipt-empty-icon">' +
+          '<svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">' +
+          '<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>' +
+          "</svg>" +
+          "</div>" +
+          '<p class="ipt-empty-text">No rules in ' +
+          escapeHtml(state.currentChain) +
+          "</p>" +
+          '<p class="ipt-empty-subtext">Click "Add Rule" to create a new firewall rule</p>' +
+          "</div>";
+      }
       return;
     }
 
     var html = "";
-    state.rules.forEach(function (rule) {
+    filtered.forEach(function (rule) {
       var targetClass = getTargetBadgeClass(rule.target);
       var optsText = buildOptionsText(rule);
 

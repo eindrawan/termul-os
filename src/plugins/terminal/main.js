@@ -245,6 +245,39 @@
       return;
     }
 
+    // Check if this is an FTP connection — FTP does not support shell access
+    var profile = api.profile;
+    if (profile && profile.protocol === "ftp") {
+      if (term) {
+        term.writeln(
+          "\x1b[33mFTP connections do not support terminal access.\x1b[0m",
+        );
+        term.writeln("");
+        term.writeln(
+          "\x1b[90mFTP is a file transfer protocol and cannot open a remote shell.\x1b[0m",
+        );
+        term.writeln(
+          "\x1b[90mTo use the terminal, connect via SSH instead.\x1b[0m",
+        );
+        term.writeln("");
+        term.writeln(
+          "\x1b[90mYou can use the File Explorer plugin to browse and manage files over FTP.\x1b[0m",
+        );
+      }
+      // Update status to show FTP not supported
+      if (statusEl) {
+        var dot = statusEl.querySelector(".tui-status-dot");
+        var text = statusEl.querySelector(".status-text");
+        statusEl.classList.add("disconnected");
+        if (dot) {
+          dot.classList.remove("connected");
+          dot.classList.add("disconnected");
+        }
+        if (text) text.textContent = "FTP — Not Supported";
+      }
+      return;
+    }
+
     try {
       var result = await api.ssh.createShell(connectionId);
       if (result.success) {

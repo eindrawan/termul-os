@@ -1058,6 +1058,7 @@
   gap: var(--tui-space-sm, 8px);
   pointer-events: none;
   padding: var(--tui-space-lg, 16px);
+  overflow: hidden;
 }
 
 .tui-toast-top-right    { top: 0; right: 0; align-items: flex-end; }

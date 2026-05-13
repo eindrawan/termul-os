@@ -1,179 +1,353 @@
 <div class="ipt-container">
-  <!-- Toolbar -->
-  <div class="tui-toolbar">
-    <div class="tui-toolbar-left">
-      <svg class="ipt-logo" width="20" height="20" viewBox="0 0 256 256" fill="none">
-        <path d="M128 40 L200 72 L200 140 C200 180 168 210 128 224 C88 210 56 180 56 140 L56 72 Z" fill="#FF6B35"/>
-        <path d="M128 80 C128 80 150 100 150 125 C150 140 142 155 128 160 C114 155 106 140 106 125 C106 100 128 80 128 80Z" fill="#E8590C"/>
-      </svg>
-      <span class="tui-toolbar-title">iptables</span>
-      <div class="tui-status" id="ipt-status">
-        <span class="tui-status-dot pulse"></span>
-        <span class="status-text">Loading...</span>
-      </div>
-    </div>
-    <div class="tui-toolbar-right">
-      <button class="tui-btn-icon" id="ipt-refresh" title="Refresh Rules">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
-        </svg>
-      </button>
-      <button class="tui-btn-icon" id="ipt-apply" title="Apply / Restart iptables">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M18.36 6.64a9 9 0 1 1-12.73 0"/><line x1="12" y1="2" x2="12" y2="12"/>
-        </svg>
-      </button>
-      <button class="tui-btn-icon" id="ipt-save" title="Save Rules Persistently">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/>
-        </svg>
-      </button>
-    </div>
-  </div>
-
-  <!-- Tab Bar (tables: Filter, NAT, Mangle, Raw) -->
-  <div class="ipt-tabs" id="ipt-tabs">
-    <button class="ipt-tab active" data-table="filter">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
-      </svg>
-      Filter
-    </button>
-    <button class="ipt-tab" data-table="nat">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/>
-        <line x1="6" y1="6" x2="18" y2="6"/><line x1="6" y1="18" x2="18" y2="18"/>
-      </svg>
-      NAT
-    </button>
-    <button class="ipt-tab" data-table="mangle">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <polyline points="4 7 4 4 20 4 20 7"/><line x1="9" y1="20" x2="15" y2="20"/>
-        <line x1="12" y1="4" x2="12" y2="20"/>
-      </svg>
-      Mangle
-    </button>
-    <button class="ipt-tab" data-table="raw">
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-        <rect x="3" y="3" width="18" height="18" rx="2"/><line x1="3" y1="9" x2="21" y2="9"/>
-        <line x1="3" y1="15" x2="21" y2="15"/><line x1="9" y1="3" x2="9" y2="21"/>
-      </svg>
-      Raw
-    </button>
-  </div>
-
-  <!-- Chain Bar (sub-tabs for chains within the selected table) -->
-  <div class="ipt-chain-bar" id="ipt-chain-bar">
-    <div class="ipt-chain-tabs" id="ipt-chain-tabs">
-      <!-- Populated dynamically -->
-    </div>
-    <div class="ipt-chain-policy" id="ipt-chain-policy">
-      <!-- Shows default policy -->
-    </div>
-  </div>
-
-  <!-- Content Area -->
-  <div class="ipt-content tui-scrollbar">
-    <!-- Rules Table -->
-    <div class="ipt-panel active" id="panel-rules">
-      <div class="ipt-panel-toolbar">
-        <div class="ipt-panel-toolbar-left">
-          <span class="ipt-count" id="rule-count">0 rules</span>
-        </div>
-        <div class="ipt-panel-toolbar-right">
-          <button class="tui-btn tui-btn-primary" id="btn-add-rule">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>
+    <!-- Toolbar -->
+    <div class="tui-toolbar">
+        <div class="tui-toolbar-left">
+            <svg
+                class="ipt-logo"
+                width="20"
+                height="20"
+                viewBox="0 0 256 256"
+                fill="none"
+            >
+                <path
+                    d="M128 40 L200 72 L200 140 C200 180 168 210 128 224 C88 210 56 180 56 140 L56 72 Z"
+                    fill="#FF6B35"
+                />
+                <path
+                    d="M128 80 C128 80 150 100 150 125 C150 140 142 155 128 160 C114 155 106 140 106 125 C106 100 128 80 128 80Z"
+                    fill="#E8590C"
+                />
             </svg>
-            Add Rule
-          </button>
-          <button class="tui-btn tui-btn-default" id="btn-flush-chain">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+            <span class="tui-toolbar-title">iptables</span>
+            <div class="tui-status" id="ipt-status">
+                <span class="tui-status-dot pulse"></span>
+                <span class="status-text">Loading...</span>
+            </div>
+        </div>
+        <div class="tui-toolbar-right">
+            <button class="tui-btn-icon" id="ipt-refresh" title="Refresh Rules">
+                <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <path d="M23 4v6h-6" />
+                    <path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+                </svg>
+            </button>
+            <button
+                class="tui-btn-icon"
+                id="ipt-apply"
+                title="Apply / Restart iptables"
+            >
+                <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <path d="M18.36 6.64a9 9 0 1 1-12.73 0" />
+                    <line x1="12" y1="2" x2="12" y2="12" />
+                </svg>
+            </button>
+            <button
+                class="tui-btn-icon"
+                id="ipt-save"
+                title="Save Rules Persistently"
+            >
+                <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <path
+                        d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"
+                    />
+                    <polyline points="17 21 17 13 7 13 7 21" />
+                    <polyline points="7 3 7 8 15 8" />
+                </svg>
+            </button>
+        </div>
+    </div>
+
+    <!-- Tab Bar (tables: Filter, NAT, Mangle, Raw) -->
+    <div class="ipt-tabs" id="ipt-tabs">
+        <button class="ipt-tab active" data-table="filter">
+            <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
             </svg>
-            Flush Chain
-          </button>
-        </div>
-      </div>
-
-      <!-- Rules List Header -->
-      <div class="ipt-list-header">
-        <span class="col-num">#</span>
-        <span class="col-target">Target</span>
-        <span class="col-proto">Proto</span>
-        <span class="col-source">Source</span>
-        <span class="col-destination">Destination</span>
-        <span class="col-options">Options</span>
-        <span class="col-actions">Actions</span>
-      </div>
-
-      <!-- Rules List -->
-      <div class="ipt-list" id="rule-list">
-        <div class="ipt-loading">
-          <div class="ipt-spinner"></div>
-          <span>Loading rules...</span>
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- Rule Detail Panel (slide-in from right) -->
-  <div class="ipt-detail" id="ipt-detail">
-    <div class="ipt-detail-header">
-      <div class="ipt-detail-title">
-        <span id="detail-title">Rule Details</span>
-      </div>
-      <button class="tui-btn-icon" id="detail-close" title="Close">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-        </svg>
-      </button>
-    </div>
-    <div class="ipt-detail-body tui-scrollbar" id="detail-body">
-      <!-- Dynamic content -->
-    </div>
-  </div>
-
-  <!-- Add/Edit Rule Modal -->
-  <div class="ipt-modal-overlay" id="ipt-modal" style="display:none">
-    <div class="ipt-modal">
-      <div class="ipt-modal-header">
-        <span class="ipt-modal-title" id="modal-title">Add Rule</span>
-        <button class="tui-btn-icon" id="modal-close-btn" title="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+            Filter
         </button>
-      </div>
-      <div class="ipt-modal-body tui-scrollbar" id="modal-body">
-        <!-- Dynamic form content -->
-      </div>
-      <div class="ipt-modal-footer">
-        <button class="tui-btn tui-btn-default" id="modal-cancel">Cancel</button>
-        <button class="tui-btn tui-btn-primary" id="modal-save">Add Rule</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Output/Log Panel (bottom) -->
-  <div class="ipt-output-panel" id="ipt-output-panel" style="display:none">
-    <div class="ipt-output-header">
-      <div class="ipt-output-title">
-        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <polyline points="4 17 10 11 4 5"/><line x1="12" y1="19" x2="20" y2="19"/>
-        </svg>
-        <span id="output-title">Command Output</span>
-      </div>
-      <div class="ipt-output-actions">
-        <button class="tui-btn-icon" id="output-close" title="Close">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
-          </svg>
+        <button class="ipt-tab" data-table="nat">
+            <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
+                <rect x="2" y="2" width="20" height="8" rx="2" />
+                <rect x="2" y="14" width="20" height="8" rx="2" />
+                <line x1="6" y1="6" x2="18" y2="6" />
+                <line x1="6" y1="18" x2="18" y2="18" />
+            </svg>
+            NAT
         </button>
-      </div>
+        <button class="ipt-tab" data-table="mangle">
+            <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
+                <polyline points="4 7 4 4 20 4 20 7" />
+                <line x1="9" y1="20" x2="15" y2="20" />
+                <line x1="12" y1="4" x2="12" y2="20" />
+            </svg>
+            Mangle
+        </button>
+        <button class="ipt-tab" data-table="raw">
+            <svg
+                width="14"
+                height="14"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+            >
+                <rect x="3" y="3" width="18" height="18" rx="2" />
+                <line x1="3" y1="9" x2="21" y2="9" />
+                <line x1="3" y1="15" x2="21" y2="15" />
+                <line x1="9" y1="3" x2="9" y2="21" />
+            </svg>
+            Raw
+        </button>
     </div>
-    <div class="ipt-output-body tui-scrollbar">
-      <pre id="output-content"></pre>
+
+    <!-- Chain Bar (sub-tabs for chains within the selected table) -->
+    <div class="ipt-chain-bar" id="ipt-chain-bar">
+        <div class="ipt-chain-tabs" id="ipt-chain-tabs">
+            <!-- Populated dynamically -->
+        </div>
+        <div class="ipt-chain-policy" id="ipt-chain-policy">
+            <!-- Shows default policy -->
+        </div>
     </div>
-  </div>
+
+    <!-- Content Area -->
+    <div class="ipt-content tui-scrollbar">
+        <!-- Rules Table -->
+        <div class="ipt-panel active" id="panel-rules">
+            <div class="ipt-panel-toolbar">
+                <div class="ipt-panel-toolbar-left">
+                    <span class="ipt-count" id="rule-count">0 rules</span>
+                    <div class="ipt-search-wrap">
+                        <svg
+                            class="ipt-search-icon"
+                            width="14"
+                            height="14"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <circle cx="11" cy="11" r="8" />
+                            <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                        </svg>
+                        <input
+                            type="text"
+                            class="ipt-search-input"
+                            id="ipt-search"
+                            placeholder="Filter rules..."
+                        />
+                        <button
+                            class="ipt-search-clear"
+                            id="ipt-search-clear"
+                            title="Clear filter"
+                            style="display: none"
+                        >
+                            <svg
+                                width="12"
+                                height="12"
+                                viewBox="0 0 24 24"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-width="2"
+                            >
+                                <line x1="18" y1="6" x2="6" y2="18" />
+                                <line x1="6" y1="6" x2="18" y2="18" />
+                            </svg>
+                        </button>
+                    </div>
+                </div>
+                <div class="ipt-panel-toolbar-right">
+                    <button class="tui-btn tui-btn-primary" id="btn-add-rule">
+                        <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <line x1="12" y1="5" x2="12" y2="19" />
+                            <line x1="5" y1="12" x2="19" y2="12" />
+                        </svg>
+                        Add Rule
+                    </button>
+                    <button
+                        class="tui-btn tui-btn-default"
+                        id="btn-flush-chain"
+                    >
+                        <svg
+                            width="12"
+                            height="12"
+                            viewBox="0 0 24 24"
+                            fill="none"
+                            stroke="currentColor"
+                            stroke-width="2"
+                        >
+                            <path
+                                d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"
+                            />
+                        </svg>
+                        Flush Chain
+                    </button>
+                </div>
+            </div>
+
+            <!-- Rules List Header -->
+            <div class="ipt-list-header">
+                <span class="col-num">#</span>
+                <span class="col-target">Target</span>
+                <span class="col-proto">Proto</span>
+                <span class="col-source">Source</span>
+                <span class="col-destination">Destination</span>
+                <span class="col-options">Options</span>
+                <span class="col-actions">Actions</span>
+            </div>
+
+            <!-- Rules List -->
+            <div class="ipt-list" id="rule-list">
+                <div class="ipt-loading">
+                    <div class="ipt-spinner"></div>
+                    <span>Loading rules...</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Rule Detail Panel (slide-in from right) -->
+    <div class="ipt-detail" id="ipt-detail">
+        <div class="ipt-detail-header">
+            <div class="ipt-detail-title">
+                <span id="detail-title">Rule Details</span>
+            </div>
+            <button class="tui-btn-icon" id="detail-close" title="Close">
+                <svg
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+            </button>
+        </div>
+        <div class="ipt-detail-body tui-scrollbar" id="detail-body">
+            <!-- Dynamic content -->
+        </div>
+    </div>
+
+    <!-- Add/Edit Rule Modal -->
+    <div class="ipt-modal-overlay" id="ipt-modal" style="display: none">
+        <div class="ipt-modal">
+            <div class="ipt-modal-header">
+                <span class="ipt-modal-title" id="modal-title">Add Rule</span>
+                <button class="tui-btn-icon" id="modal-close-btn" title="Close">
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+            <div class="ipt-modal-body tui-scrollbar" id="modal-body">
+                <!-- Dynamic form content -->
+            </div>
+            <div class="ipt-modal-footer">
+                <button class="tui-btn tui-btn-default" id="modal-cancel">
+                    Cancel
+                </button>
+                <button class="tui-btn tui-btn-primary" id="modal-save">
+                    Add Rule
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Output/Log Panel (bottom) -->
+    <div class="ipt-output-panel" id="ipt-output-panel" style="display: none">
+        <div class="ipt-output-header">
+            <div class="ipt-output-title">
+                <svg
+                    width="12"
+                    height="12"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                >
+                    <polyline points="4 17 10 11 4 5" />
+                    <line x1="12" y1="19" x2="20" y2="19" />
+                </svg>
+                <span id="output-title">Command Output</span>
+            </div>
+            <div class="ipt-output-actions">
+                <button class="tui-btn-icon" id="output-close" title="Close">
+                    <svg
+                        width="14"
+                        height="14"
+                        viewBox="0 0 24 24"
+                        fill="none"
+                        stroke="currentColor"
+                        stroke-width="2"
+                    >
+                        <line x1="18" y1="6" x2="6" y2="18" />
+                        <line x1="6" y1="6" x2="18" y2="18" />
+                    </svg>
+                </button>
+            </div>
+        </div>
+        <div class="ipt-output-body tui-scrollbar">
+            <pre id="output-content"></pre>
+        </div>
+    </div>
 </div>

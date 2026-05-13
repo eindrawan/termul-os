@@ -1,41 +1,51 @@
-const { app, BrowserWindow, ipcMain, dialog, protocol, screen } = require('electron');
-const path = require('path');
-const fs = require('fs');
-const net = require('net');
-const os = require('os');
-const { Transform } = require('stream');
-const { Client } = require('ssh2');
-const ftp = require('basic-ftp');
+const {
+  app,
+  BrowserWindow,
+  ipcMain,
+  dialog,
+  protocol,
+  screen,
+} = require("electron");
+const path = require("path");
+const fs = require("fs");
+const net = require("net");
+const os = require("os");
+const { Transform } = require("stream");
+const { Client } = require("ssh2");
+const ftp = require("basic-ftp");
 
 // ─── Paths ───────────────────────────────────────────────────────────
-const SRC_DIR = path.join(__dirname, '..', 'src');
-const PLUGINS_DIR = path.join(SRC_DIR, 'plugins');
-const USER_DATA = app.getPath('userData');
-const PROFILES_FILE = path.join(USER_DATA, 'profiles.json');
-const SETTINGS_FILE = path.join(USER_DATA, 'settings.json');
-const PORT_FORWARD_FILE = path.join(USER_DATA, 'port-forward-rules.json');
+const SRC_DIR = path.join(__dirname, "..", "src");
+const PLUGINS_DIR = path.join(SRC_DIR, "plugins");
+const USER_DATA = app.getPath("userData");
+const PROFILES_FILE = path.join(USER_DATA, "profiles.json");
+const SETTINGS_FILE = path.join(USER_DATA, "settings.json");
+const PORT_FORWARD_FILE = path.join(USER_DATA, "port-forward-rules.json");
 
 // ─── Monaco Editor custom protocol ─────────────────────────────────
 // Must be registered BEFORE app.whenReady()
-protocol.registerSchemesAsPrivileged([{
-  scheme: 'monaco',
-  privileges: {
-    standard: true,
-    secure: true,
-    supportFetchAPI: true,
-    corsEnabled: true,
-    bypassCSP: true,
-  }
-}, {
-  scheme: 'localfile',
-  privileges: {
-    standard: true,
-    secure: true,
-    supportFetchAPI: true,
-    corsEnabled: true,
-    bypassCSP: true,
-  }
-}]);
+protocol.registerSchemesAsPrivileged([
+  {
+    scheme: "monaco",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      bypassCSP: true,
+    },
+  },
+  {
+    scheme: "localfile",
+    privileges: {
+      standard: true,
+      secure: true,
+      supportFetchAPI: true,
+      corsEnabled: true,
+      bypassCSP: true,
+    },
+  },
+]);
 
 // ─── State ───────────────────────────────────────────────────────────
 let mainWindow = null;
@@ -47,7 +57,7 @@ let preMaximizeBounds = null;
 
 // ─── Port Forwarding State ─────────────────────────────────────────────
 let activeTunnels = new Map(); // ruleId → { server, sockets, rule, connectionId }
-let tunnelRules = [];          // Persisted rules array
+let tunnelRules = []; // Persisted rules array
 
 // ─── SFTP Channel Management ───────────────────────────────────────────
 /**
@@ -58,7 +68,7 @@ let tunnelRules = [];          // Persisted rules array
 async function getSftpChannel(connectionId) {
   const conn = sshConnections.get(connectionId);
   if (!conn) {
-    throw new Error('No active SSH connection');
+    throw new Error("No active SSH connection");
   }
 
   // Check if we already have a ready SFTP channel
@@ -72,7 +82,11 @@ async function getSftpChannel(connectionId) {
     conn.sftp((err, sftp) => {
       if (err) {
         // Store the error so we don't keep retrying
-        sftpChannels.set(connectionId, { sftp: null, ready: false, error: err });
+        sftpChannels.set(connectionId, {
+          sftp: null,
+          ready: false,
+          error: err,
+        });
         reject(err);
         return;
       }
@@ -81,7 +95,7 @@ async function getSftpChannel(connectionId) {
       sftpChannels.set(connectionId, { sftp, ready: true, error: null });
 
       // Handle SFTP errors - mark as not ready
-      sftp.on('error', (err) => {
+      sftp.on("error", (err) => {
         console.error(`[SFTP] Channel error for ${connectionId}:`, err.message);
         const current = sftpChannels.get(connectionId);
         if (current) {
@@ -91,7 +105,7 @@ async function getSftpChannel(connectionId) {
       });
 
       // Handle SFTP close
-      sftp.on('close', () => {
+      sftp.on("close", () => {
         console.log(`[SFTP] Channel closed for ${connectionId}`);
         sftpChannels.delete(connectionId);
       });
@@ -124,10 +138,10 @@ function closeSftpChannel(connectionId) {
  * Rejects anything with separators or parent refs.
  */
 function sanitizeDirName(dirName) {
-  if (!dirName || typeof dirName !== 'string') return null;
+  if (!dirName || typeof dirName !== "string") return null;
   // Reject path separators, dots, and control chars
   if (/[/\\:]/.test(dirName)) return null;
-  if (dirName.includes('..')) return null;
+  if (dirName.includes("..")) return null;
   if (dirName.trim() !== dirName) return null;
   if (dirName.length === 0 || dirName.length > 255) return null;
   return dirName;
@@ -138,10 +152,10 @@ function sanitizeDirName(dirName) {
  * Only allows alphanumeric, dash, underscore, dot.
  */
 function sanitizeFileName(fileName) {
-  if (!fileName || typeof fileName !== 'string') return null;
+  if (!fileName || typeof fileName !== "string") return null;
   // Must not contain path separators or parent refs
   if (/[/\\:]/.test(fileName)) return null;
-  if (fileName.includes('..')) return null;
+  if (fileName.includes("..")) return null;
   // Only allow safe characters
   if (!/^[a-zA-Z0-9._-]+$/.test(fileName)) return null;
   return fileName;
@@ -164,7 +178,7 @@ function safePluginPath(dirName, fileName) {
 // ─── Ensure data files exist ─────────────────────────────────────────
 function ensureDataFiles() {
   if (!fs.existsSync(PROFILES_FILE)) {
-    fs.writeFileSync(PROFILES_FILE, JSON.stringify([], null, 2), 'utf-8');
+    fs.writeFileSync(PROFILES_FILE, JSON.stringify([], null, 2), "utf-8");
   }
   // Ensure plugins directory exists
   if (!fs.existsSync(PLUGINS_DIR)) {
@@ -180,7 +194,7 @@ function ensureDataFiles() {
 function loadPortForwardRules() {
   try {
     if (fs.existsSync(PORT_FORWARD_FILE)) {
-      tunnelRules = JSON.parse(fs.readFileSync(PORT_FORWARD_FILE, 'utf-8'));
+      tunnelRules = JSON.parse(fs.readFileSync(PORT_FORWARD_FILE, "utf-8"));
     }
   } catch {
     tunnelRules = [];
@@ -197,9 +211,13 @@ function loadPortForwardRules() {
  */
 function savePortForwardRules() {
   try {
-    fs.writeFileSync(PORT_FORWARD_FILE, JSON.stringify(tunnelRules, null, 2), 'utf-8');
+    fs.writeFileSync(
+      PORT_FORWARD_FILE,
+      JSON.stringify(tunnelRules, null, 2),
+      "utf-8",
+    );
   } catch (err) {
-    console.error('[PortForward] Failed to save rules:', err);
+    console.error("[PortForward] Failed to save rules:", err);
   }
 }
 
@@ -208,24 +226,24 @@ function savePortForwardRules() {
  * Creates a net.Server on the local port that forwards connections via SSH forwardOut.
  */
 async function startTunnel(ruleId, connectionId) {
-  const rule = tunnelRules.find(r => r.id === ruleId);
-  if (!rule) return { success: false, error: 'Rule not found' };
+  const rule = tunnelRules.find((r) => r.id === ruleId);
+  if (!rule) return { success: false, error: "Rule not found" };
 
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active SSH connection' };
+  if (!conn) return { success: false, error: "No active SSH connection" };
 
   if (activeTunnels.has(ruleId)) {
-    return { success: false, error: 'Tunnel already active' };
+    return { success: false, error: "Tunnel already active" };
   }
 
-  const remoteHost = rule.remoteHost || 'localhost';
+  const remoteHost = rule.remoteHost || "localhost";
 
   return new Promise((resolve) => {
     const sockets = new Set();
 
     const server = net.createServer((socket) => {
       conn.forwardOut(
-        socket.remoteAddress || '127.0.0.1',
+        socket.remoteAddress || "127.0.0.1",
         socket.remotePort || 0,
         remoteHost,
         rule.remotePort,
@@ -243,36 +261,56 @@ async function startTunnel(ruleId, connectionId) {
 
           const cleanup = () => {
             sockets.delete(entry);
-            try { socket.destroy(); } catch (e) { /* ignore */ }
-            try { stream.close(); } catch (e) { /* ignore */ }
+            try {
+              socket.destroy();
+            } catch (e) {
+              /* ignore */
+            }
+            try {
+              stream.close();
+            } catch (e) {
+              /* ignore */
+            }
           };
 
-          socket.on('error', cleanup);
-          stream.on('error', cleanup);
-          socket.on('close', () => sockets.delete(entry));
-          stream.on('close', () => sockets.delete(entry));
-        }
+          socket.on("error", cleanup);
+          stream.on("error", cleanup);
+          socket.on("close", () => sockets.delete(entry));
+          stream.on("close", () => sockets.delete(entry));
+        },
       );
     });
 
-    server.on('error', (err) => {
-      if (err.code === 'EADDRINUSE') {
-        resolve({ success: false, error: 'Port ' + rule.localPort + ' is already in use' });
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        resolve({
+          success: false,
+          error: "Port " + rule.localPort + " is already in use",
+        });
       } else {
         resolve({ success: false, error: err.message });
       }
     });
 
-    server.listen(rule.localPort, '127.0.0.1', () => {
+    server.listen(rule.localPort, "127.0.0.1", () => {
       activeTunnels.set(ruleId, { server, sockets, rule, connectionId });
       rule.enabled = true;
       savePortForwardRules();
 
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('tunnel:status-changed', { ruleId, active: true });
+        mainWindow.webContents.send("tunnel:status-changed", {
+          ruleId,
+          active: true,
+        });
       }
 
-      console.log('[PortForward] Started tunnel:', rule.name, 'localhost:' + rule.localPort, '→', remoteHost + ':' + rule.remotePort);
+      console.log(
+        "[PortForward] Started tunnel:",
+        rule.name,
+        "localhost:" + rule.localPort,
+        "→",
+        remoteHost + ":" + rule.remotePort,
+      );
       resolve({ success: true });
     });
   });
@@ -286,12 +324,15 @@ function stopTunnel(ruleId) {
   if (!tunnel) {
     // Stale state: rule may say enabled but tunnel isn't running.
     // Just clean up the flag.
-    const rule = tunnelRules.find(r => r.id === ruleId);
+    const rule = tunnelRules.find((r) => r.id === ruleId);
     if (rule && rule.enabled) {
       rule.enabled = false;
       savePortForwardRules();
       if (mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('tunnel:status-changed', { ruleId, active: false });
+        mainWindow.webContents.send("tunnel:status-changed", {
+          ruleId,
+          active: false,
+        });
       }
     }
     return { success: true };
@@ -299,8 +340,16 @@ function stopTunnel(ruleId) {
 
   // Close all active connections
   for (const entry of tunnel.sockets) {
-    try { entry.socket.destroy(); } catch (e) { /* ignore */ }
-    try { entry.stream.close(); } catch (e) { /* ignore */ }
+    try {
+      entry.socket.destroy();
+    } catch (e) {
+      /* ignore */
+    }
+    try {
+      entry.stream.close();
+    } catch (e) {
+      /* ignore */
+    }
   }
   tunnel.sockets.clear();
 
@@ -308,15 +357,18 @@ function stopTunnel(ruleId) {
   tunnel.server.close();
   activeTunnels.delete(ruleId);
 
-  const rule = tunnelRules.find(r => r.id === ruleId);
+  const rule = tunnelRules.find((r) => r.id === ruleId);
   if (rule) rule.enabled = false;
   savePortForwardRules();
 
   if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.webContents.send('tunnel:status-changed', { ruleId, active: false });
+    mainWindow.webContents.send("tunnel:status-changed", {
+      ruleId,
+      active: false,
+    });
   }
 
-  console.log('[PortForward] Stopped tunnel:', ruleId);
+  console.log("[PortForward] Stopped tunnel:", ruleId);
   return { success: true };
 }
 
@@ -354,36 +406,36 @@ function createMainWindow() {
     minHeight: 700,
     frame: false,
     transparent: true,
-    backgroundColor: '#00000000',
-    titleBarStyle: 'hidden',
+    backgroundColor: "#00000000",
+    titleBarStyle: "hidden",
     webPreferences: {
-      preload: path.join(__dirname, 'preload.js'),
+      preload: path.join(__dirname, "preload.js"),
       contextIsolation: true,
       nodeIntegration: false,
-      sandbox: false
+      sandbox: false,
     },
-    show: false
+    show: false,
   });
 
-  mainWindow.loadFile(path.join(SRC_DIR, 'index.html'));
+  mainWindow.loadFile(path.join(SRC_DIR, "index.html"));
 
-  mainWindow.once('ready-to-show', () => {
+  mainWindow.once("ready-to-show", () => {
     mainWindow.show();
   });
 
   // Keep isManuallyMaximized in sync with native maximize events
   // (e.g. Windows Snap, double-click on -webkit-app-region: drag)
-  mainWindow.on('maximize', () => {
+  mainWindow.on("maximize", () => {
     if (!isManuallyMaximized) {
       preMaximizeBounds = null; // Native maximize — no saved bounds
     }
     isManuallyMaximized = true;
   });
-  mainWindow.on('unmaximize', () => {
+  mainWindow.on("unmaximize", () => {
     isManuallyMaximized = false;
   });
 
-  mainWindow.on('closed', () => {
+  mainWindow.on("closed", () => {
     // Close all SSH connections and tunnels
     stopAllTunnels();
     for (const [id, conn] of sshConnections) {
@@ -397,7 +449,11 @@ function createMainWindow() {
     sftpChannels.clear();
     // Close all FTP connections
     for (const [id, entry] of ftpConnections) {
-      try { entry.client.close(); } catch (e) { /* ignore */ }
+      try {
+        entry.client.close();
+      } catch (e) {
+        /* ignore */
+      }
     }
     ftpConnections.clear();
     mainWindow = null;
@@ -412,24 +468,31 @@ app.whenReady().then(() => {
   // Register monaco:// protocol to serve Monaco Editor files from node_modules
   // Base URL format: monaco://resources/vs/ — "resources" is a dummy host
   // All paths resolve to: node_modules/monaco-editor/min/vs/<path>
-  const MONACO_VS_DIR = path.join(__dirname, '..', 'node_modules', 'monaco-editor', 'min', 'vs');
-  protocol.registerFileProtocol('monaco', (request, callback) => {
+  const MONACO_VS_DIR = path.join(
+    __dirname,
+    "..",
+    "node_modules",
+    "monaco-editor",
+    "min",
+    "vs",
+  );
+  protocol.registerFileProtocol("monaco", (request, callback) => {
     try {
       const url = new URL(request.url);
       // url.pathname is like "/vs/loader.js" or "/vs/editor/editor.main.js"
       let relativePath = url.pathname;
       // Remove leading slash
-      if (relativePath.startsWith('/')) {
+      if (relativePath.startsWith("/")) {
         relativePath = relativePath.substring(1);
       }
       // Remove "vs/" prefix since MONACO_VS_DIR already includes it
-      if (relativePath.startsWith('vs/')) {
+      if (relativePath.startsWith("vs/")) {
         relativePath = relativePath.substring(3);
       }
       const filePath = path.join(MONACO_VS_DIR, relativePath);
       callback({ path: filePath });
     } catch (e) {
-      console.error('[monaco protocol] Error parsing URL:', request.url, e);
+      console.error("[monaco protocol] Error parsing URL:", request.url, e);
       callback({ error: -2 }); // net::FAILED
     }
   });
@@ -438,12 +501,12 @@ app.whenReady().then(() => {
   // The URL format uses a hash fragment to carry the raw file path, avoiding
   // browser URL parsing issues with Windows drive letters (C: being treated as hostname).
   // Example: localfile://bg#/C:/Users/test/image.jpg
-  protocol.handle('localfile', async (request) => {
+  protocol.handle("localfile", async (request) => {
     try {
       // Extract the hash fragment which contains the unmodified file path
-      const hashIndex = request.url.indexOf('#');
+      const hashIndex = request.url.indexOf("#");
       if (hashIndex === -1) {
-        return new Response('Missing path', { status: 400 });
+        return new Response("Missing path", { status: 400 });
       }
       const filePath = decodeURIComponent(request.url.substring(hashIndex + 1));
 
@@ -451,30 +514,38 @@ app.whenReady().then(() => {
       // Determine MIME type from extension
       const ext = path.extname(filePath).toLowerCase();
       const mimeMap = {
-        '.jpg': 'image/jpeg', '.jpeg': 'image/jpeg', '.png': 'image/png',
-        '.gif': 'image/gif', '.bmp': 'image/bmp', '.webp': 'image/webp',
-        '.svg': 'image/svg+xml', '.ico': 'image/x-icon',
+        ".jpg": "image/jpeg",
+        ".jpeg": "image/jpeg",
+        ".png": "image/png",
+        ".gif": "image/gif",
+        ".bmp": "image/bmp",
+        ".webp": "image/webp",
+        ".svg": "image/svg+xml",
+        ".ico": "image/x-icon",
       };
-      const mime = mimeMap[ext] || 'application/octet-stream';
+      const mime = mimeMap[ext] || "application/octet-stream";
       return new Response(data, {
-        headers: { 'Content-Type': mime, 'Cache-Control': 'public, max-age=86400' }
+        headers: {
+          "Content-Type": mime,
+          "Cache-Control": "public, max-age=86400",
+        },
       });
     } catch (e) {
-      console.error('[localfile protocol] Error:', request.url, e.message);
-      return new Response('Not found', { status: 404 });
+      console.error("[localfile protocol] Error:", request.url, e.message);
+      return new Response("Not found", { status: 404 });
     }
   });
 
   createMainWindow();
 
-  app.on('activate', () => {
+  app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
       createMainWindow();
     }
   });
 });
 
-app.on('window-all-closed', () => {
+app.on("window-all-closed", () => {
   stopAllTunnels();
   for (const [id, conn] of sshConnections) {
     if (conn && conn.end) conn.end();
@@ -482,10 +553,14 @@ app.on('window-all-closed', () => {
   sshConnections.clear();
   // Close all FTP connections
   for (const [id, entry] of ftpConnections) {
-    try { entry.client.close(); } catch (e) { /* ignore */ }
+    try {
+      entry.client.close();
+    } catch (e) {
+      /* ignore */
+    }
   }
   ftpConnections.clear();
-  if (process.platform !== 'darwin') {
+  if (process.platform !== "darwin") {
     app.quit();
   }
 });
@@ -493,8 +568,8 @@ app.on('window-all-closed', () => {
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: Window Controls
 // ═══════════════════════════════════════════════════════════════════════
-ipcMain.handle('window:minimize', () => mainWindow?.minimize());
-ipcMain.handle('window:maximize', () => {
+ipcMain.handle("window:minimize", () => mainWindow?.minimize());
+ipcMain.handle("window:maximize", () => {
   if (!mainWindow) return;
   if (isManuallyMaximized) {
     // Restore to previous bounds
@@ -511,62 +586,62 @@ ipcMain.handle('window:maximize', () => {
       x: workArea.x,
       y: workArea.y,
       width: workArea.width,
-      height: workArea.height
+      height: workArea.height,
     });
     isManuallyMaximized = true;
   }
 });
-ipcMain.handle('window:close', () => mainWindow?.close());
-ipcMain.handle('window:isMaximized', () => isManuallyMaximized);
+ipcMain.handle("window:close", () => mainWindow?.close());
+ipcMain.handle("window:isMaximized", () => isManuallyMaximized);
 
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: Profiles
 // ═══════════════════════════════════════════════════════════════════════
-ipcMain.handle('profiles:getAll', () => {
+ipcMain.handle("profiles:getAll", () => {
   try {
-    const data = fs.readFileSync(PROFILES_FILE, 'utf-8');
+    const data = fs.readFileSync(PROFILES_FILE, "utf-8");
     return JSON.parse(data);
   } catch {
     return [];
   }
 });
 
-ipcMain.handle('profiles:save', (event, profile) => {
+ipcMain.handle("profiles:save", (event, profile) => {
   let profiles = [];
   try {
-    profiles = JSON.parse(fs.readFileSync(PROFILES_FILE, 'utf-8'));
+    profiles = JSON.parse(fs.readFileSync(PROFILES_FILE, "utf-8"));
   } catch {
     profiles = [];
   }
 
-  const existingIdx = profiles.findIndex(p => p.id === profile.id);
+  const existingIdx = profiles.findIndex((p) => p.id === profile.id);
   if (existingIdx >= 0) {
     profiles[existingIdx] = profile;
   } else {
     profiles.push(profile);
   }
 
-  fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2), 'utf-8');
+  fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2), "utf-8");
   return true;
 });
 
-ipcMain.handle('profiles:delete', (event, profileId) => {
+ipcMain.handle("profiles:delete", (event, profileId) => {
   let profiles = [];
   try {
-    profiles = JSON.parse(fs.readFileSync(PROFILES_FILE, 'utf-8'));
+    profiles = JSON.parse(fs.readFileSync(PROFILES_FILE, "utf-8"));
   } catch {
     profiles = [];
   }
 
-  profiles = profiles.filter(p => p.id !== profileId);
-  fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2), 'utf-8');
+  profiles = profiles.filter((p) => p.id !== profileId);
+  fs.writeFileSync(PROFILES_FILE, JSON.stringify(profiles, null, 2), "utf-8");
   return true;
 });
 
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: SSH Connection
 // ═══════════════════════════════════════════════════════════════════════
-ipcMain.handle('ssh:connect', (event, profile) => {
+ipcMain.handle("ssh:connect", (event, profile) => {
   return new Promise((resolve, reject) => {
     const conn = new Client();
     const connId = profile.id || Date.now().toString();
@@ -577,7 +652,7 @@ ipcMain.handle('ssh:connect', (event, profile) => {
       username: profile.username,
     };
 
-    if (profile.authType === 'key' && profile.privateKey) {
+    if (profile.authType === "key" && profile.privateKey) {
       sshConfig.privateKey = fs.readFileSync(profile.privateKey);
       if (profile.passphrase) {
         sshConfig.passphrase = profile.passphrase;
@@ -586,12 +661,12 @@ ipcMain.handle('ssh:connect', (event, profile) => {
       sshConfig.password = profile.password;
     }
 
-    conn.on('ready', () => {
+    conn.on("ready", () => {
       sshConnections.set(connId, conn);
       resolve({ success: true, connectionId: connId });
     });
 
-    conn.on('error', (err) => {
+    conn.on("error", (err) => {
       // If the connection was already established, this is a runtime error
       // (e.g. connection lost). Notify the renderer.
       if (sshConnections.has(connId)) {
@@ -599,9 +674,9 @@ ipcMain.handle('ssh:connect', (event, profile) => {
         closeSftpChannel(connId);
 
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:connection-error', {
+          mainWindow.webContents.send("ssh:connection-error", {
             connectionId: connId,
-            error: err.message
+            error: err.message,
           });
         }
         sshConnections.delete(connId);
@@ -610,7 +685,7 @@ ipcMain.handle('ssh:connect', (event, profile) => {
       }
     });
 
-    conn.on('close', () => {
+    conn.on("close", () => {
       const wasConnected = sshConnections.has(connId);
       sshConnections.delete(connId);
 
@@ -622,8 +697,8 @@ ipcMain.handle('ssh:connect', (event, profile) => {
 
       // Notify the renderer if this was an established connection that closed
       if (wasConnected && mainWindow && !mainWindow.isDestroyed()) {
-        mainWindow.webContents.send('ssh:connection-closed', {
-          connectionId: connId
+        mainWindow.webContents.send("ssh:connection-closed", {
+          connectionId: connId,
         });
       }
     });
@@ -632,7 +707,7 @@ ipcMain.handle('ssh:connect', (event, profile) => {
   });
 });
 
-ipcMain.handle('ssh:disconnect', (event, connectionId) => {
+ipcMain.handle("ssh:disconnect", (event, connectionId) => {
   const conn = sshConnections.get(connectionId);
   if (conn) {
     conn.end();
@@ -647,14 +722,14 @@ ipcMain.handle('ssh:disconnect', (event, connectionId) => {
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: SSH Shell
 // ═══════════════════════════════════════════════════════════════════════
-ipcMain.handle('ssh:createShell', (event, connectionId) => {
+ipcMain.handle("ssh:createShell", (event, connectionId) => {
   const conn = sshConnections.get(connectionId);
   if (!conn) {
-    return { success: false, error: 'No active connection' };
+    return { success: false, error: "No active connection" };
   }
 
   return new Promise((resolve) => {
-    conn.shell({ term: 'xterm-256color' }, (err, stream) => {
+    conn.shell({ term: "xterm-256color" }, (err, stream) => {
       if (err) {
         resolve({ success: false, error: err.message });
         return;
@@ -662,27 +737,27 @@ ipcMain.handle('ssh:createShell', (event, connectionId) => {
 
       const streamId = Date.now().toString();
 
-      stream.on('data', (data) => {
+      stream.on("data", (data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:shell-data', {
+          mainWindow.webContents.send("ssh:shell-data", {
             streamId,
-            data: data.toString('utf-8')
+            data: data.toString("utf-8"),
           });
         }
       });
 
-      stream.stderr.on('data', (data) => {
+      stream.stderr.on("data", (data) => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:shell-data', {
+          mainWindow.webContents.send("ssh:shell-data", {
             streamId,
-            data: data.toString('utf-8')
+            data: data.toString("utf-8"),
           });
         }
       });
 
-      stream.on('close', () => {
+      stream.on("close", () => {
         if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ssh:shell-closed', { streamId });
+          mainWindow.webContents.send("ssh:shell-closed", { streamId });
         }
       });
 
@@ -694,7 +769,7 @@ ipcMain.handle('ssh:createShell', (event, connectionId) => {
   });
 });
 
-ipcMain.handle('ssh:shell-write', (event, streamId, data) => {
+ipcMain.handle("ssh:shell-write", (event, streamId, data) => {
   if (!global.sshStreams) return false;
   const stream = global.sshStreams.get(streamId);
   if (stream) {
@@ -704,7 +779,7 @@ ipcMain.handle('ssh:shell-write', (event, streamId, data) => {
   return false;
 });
 
-ipcMain.handle('ssh:shell-resize', (event, streamId, cols, rows) => {
+ipcMain.handle("ssh:shell-resize", (event, streamId, cols, rows) => {
   if (!global.sshStreams) return false;
   const stream = global.sshStreams.get(streamId);
   if (stream && stream.setWindow) {
@@ -714,7 +789,7 @@ ipcMain.handle('ssh:shell-resize', (event, streamId, cols, rows) => {
   return false;
 });
 
-ipcMain.handle('ssh:shell-close', (event, streamId) => {
+ipcMain.handle("ssh:shell-close", (event, streamId) => {
   if (!global.sshStreams) return false;
   const stream = global.sshStreams.get(streamId);
   if (stream) {
@@ -732,7 +807,7 @@ ipcMain.handle('ssh:shell-close', (event, streamId) => {
 /**
  * GET all plugins — reads all manifests from PLUGINS_DIR.
  */
-ipcMain.handle('plugins:getAll', () => {
+ipcMain.handle("plugins:getAll", () => {
   const plugins = [];
   try {
     const entries = fs.readdirSync(PLUGINS_DIR, { withFileTypes: true });
@@ -740,11 +815,11 @@ ipcMain.handle('plugins:getAll', () => {
       if (!entry.isDirectory()) continue;
       if (!sanitizeDirName(entry.name)) continue; // skip suspicious dirs
 
-      const manifestPath = path.join(PLUGINS_DIR, entry.name, 'manifest.json');
+      const manifestPath = path.join(PLUGINS_DIR, entry.name, "manifest.json");
       if (!fs.existsSync(manifestPath)) continue;
 
       try {
-        const raw = fs.readFileSync(manifestPath, 'utf-8');
+        const raw = fs.readFileSync(manifestPath, "utf-8");
         const manifest = JSON.parse(raw);
         // Basic validation
         if (!manifest.name || !manifest.version) continue;
@@ -752,7 +827,7 @@ ipcMain.handle('plugins:getAll', () => {
         plugins.push({
           ...manifest,
           dirName: entry.name,
-          path: path.join(PLUGINS_DIR, entry.name)
+          path: path.join(PLUGINS_DIR, entry.name),
         });
       } catch {
         // Skip invalid manifests silently
@@ -768,30 +843,30 @@ ipcMain.handle('plugins:getAll', () => {
  * BATCHED file loading — single IPC call to load all plugin files.
  * Returns { html, css, js, icon } with null for missing files.
  */
-ipcMain.handle('plugins:loadFiles', (event, dirName) => {
+ipcMain.handle("plugins:loadFiles", (event, dirName) => {
   if (!sanitizeDirName(dirName)) {
-    return { error: 'Invalid plugin directory name' };
+    return { error: "Invalid plugin directory name" };
   }
 
   const pluginDir = path.join(PLUGINS_DIR, dirName);
   if (!fs.existsSync(pluginDir)) {
-    return { error: 'Plugin not found' };
+    return { error: "Plugin not found" };
   }
 
   const result = { html: null, css: null, js: null, icon: null };
 
   const files = [
-    { key: 'html', name: 'index.html' },
-    { key: 'css',  name: 'style.css' },
-    { key: 'js',   name: 'main.js' },
-    { key: 'icon', name: 'icon.svg' },
+    { key: "html", name: "index.html" },
+    { key: "css", name: "style.css" },
+    { key: "js", name: "main.js" },
+    { key: "icon", name: "icon.svg" },
   ];
 
   for (const file of files) {
     const filePath = safePluginPath(dirName, file.name);
     if (filePath && fs.existsSync(filePath)) {
       try {
-        result[file.key] = fs.readFileSync(filePath, 'utf-8');
+        result[file.key] = fs.readFileSync(filePath, "utf-8");
       } catch {
         // Skip unreadable files
       }
@@ -804,10 +879,10 @@ ipcMain.handle('plugins:loadFiles', (event, dirName) => {
 /**
  * INSTALL a plugin — writes all files atomically.
  */
-ipcMain.handle('plugins:install', async (event, pluginData) => {
+ipcMain.handle("plugins:install", async (event, pluginData) => {
   // Validate dirName
   if (!sanitizeDirName(pluginData.dirName)) {
-    return { success: false, error: 'Invalid plugin directory name' };
+    return { success: false, error: "Invalid plugin directory name" };
   }
 
   const pluginDir = path.join(PLUGINS_DIR, pluginData.dirName);
@@ -821,18 +896,18 @@ ipcMain.handle('plugins:install', async (event, pluginData) => {
     // Write manifest
     if (pluginData.manifest) {
       fs.writeFileSync(
-        path.join(pluginDir, 'manifest.json'),
+        path.join(pluginDir, "manifest.json"),
         JSON.stringify(pluginData.manifest, null, 2),
-        'utf-8'
+        "utf-8",
       );
     }
 
     // Write all optional files
     const files = [
-      { data: pluginData.mainScript, name: 'main.js' },
-      { data: pluginData.mainHtml,   name: 'index.html' },
-      { data: pluginData.styles,     name: 'style.css' },
-      { data: pluginData.icon,       name: 'icon.svg' },
+      { data: pluginData.mainScript, name: "main.js" },
+      { data: pluginData.mainHtml, name: "index.html" },
+      { data: pluginData.styles, name: "style.css" },
+      { data: pluginData.icon, name: "icon.svg" },
     ];
 
     for (const file of files) {
@@ -841,7 +916,7 @@ ipcMain.handle('plugins:install', async (event, pluginData) => {
         if (!filePath) {
           return { success: false, error: `Invalid file name: ${file.name}` };
         }
-        fs.writeFileSync(filePath, file.data, 'utf-8');
+        fs.writeFileSync(filePath, file.data, "utf-8");
       }
     }
 
@@ -854,9 +929,9 @@ ipcMain.handle('plugins:install', async (event, pluginData) => {
 /**
  * UNINSTALL a plugin — removes the entire directory.
  */
-ipcMain.handle('plugins:uninstall', (event, dirName) => {
+ipcMain.handle("plugins:uninstall", (event, dirName) => {
   if (!sanitizeDirName(dirName)) {
-    return { success: false, error: 'Invalid plugin directory name' };
+    return { success: false, error: "Invalid plugin directory name" };
   }
 
   const pluginDir = path.join(PLUGINS_DIR, dirName);
@@ -864,7 +939,7 @@ ipcMain.handle('plugins:uninstall', (event, dirName) => {
   // Extra safety: verify resolved path is inside PLUGINS_DIR
   const resolved = path.resolve(pluginDir);
   if (!resolved.startsWith(path.resolve(PLUGINS_DIR))) {
-    return { success: false, error: 'Path traversal detected' };
+    return { success: false, error: "Path traversal detected" };
   }
 
   try {
@@ -872,7 +947,7 @@ ipcMain.handle('plugins:uninstall', (event, dirName) => {
       fs.rmSync(pluginDir, { recursive: true, force: true });
       return { success: true };
     }
-    return { success: false, error: 'Plugin not found' };
+    return { success: false, error: "Plugin not found" };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -882,7 +957,7 @@ ipcMain.handle('plugins:uninstall', (event, dirName) => {
  * READ a single file from a plugin directory.
  * Uses path validation to prevent traversal.
  */
-ipcMain.handle('plugins:readFile', (event, pluginDir, fileName) => {
+ipcMain.handle("plugins:readFile", (event, pluginDir, fileName) => {
   const filePath = safePluginPath(pluginDir, fileName);
   if (!filePath) {
     return null; // Invalid path, return null silently
@@ -890,7 +965,7 @@ ipcMain.handle('plugins:readFile', (event, pluginDir, fileName) => {
 
   try {
     if (fs.existsSync(filePath)) {
-      return fs.readFileSync(filePath, 'utf-8');
+      return fs.readFileSync(filePath, "utf-8");
     }
     return null;
   } catch {
@@ -902,28 +977,37 @@ ipcMain.handle('plugins:readFile', (event, pluginDir, fileName) => {
 // IPC: xterm.js Terminal Library
 // ═══════════════════════════════════════════════════════════════════════
 
-const XTERM_DIR = path.join(__dirname, '..', 'node_modules', '@xterm', 'xterm');
-const FIT_ADDON_DIR = path.join(__dirname, '..', 'node_modules', '@xterm', 'addon-fit');
+const XTERM_DIR = path.join(__dirname, "..", "node_modules", "@xterm", "xterm");
+const FIT_ADDON_DIR = path.join(
+  __dirname,
+  "..",
+  "node_modules",
+  "@xterm",
+  "addon-fit",
+);
 
-ipcMain.handle('xterm:getJS', () => {
+ipcMain.handle("xterm:getJS", () => {
   try {
-    return fs.readFileSync(path.join(XTERM_DIR, 'lib', 'xterm.js'), 'utf-8');
+    return fs.readFileSync(path.join(XTERM_DIR, "lib", "xterm.js"), "utf-8");
   } catch {
     return null;
   }
 });
 
-ipcMain.handle('xterm:getCSS', () => {
+ipcMain.handle("xterm:getCSS", () => {
   try {
-    return fs.readFileSync(path.join(XTERM_DIR, 'css', 'xterm.css'), 'utf-8');
+    return fs.readFileSync(path.join(XTERM_DIR, "css", "xterm.css"), "utf-8");
   } catch {
     return null;
   }
 });
 
-ipcMain.handle('xterm:getFitAddonJS', () => {
+ipcMain.handle("xterm:getFitAddonJS", () => {
   try {
-    return fs.readFileSync(path.join(FIT_ADDON_DIR, 'lib', 'addon-fit.js'), 'utf-8');
+    return fs.readFileSync(
+      path.join(FIT_ADDON_DIR, "lib", "addon-fit.js"),
+      "utf-8",
+    );
   } catch {
     return null;
   }
@@ -932,15 +1016,15 @@ ipcMain.handle('xterm:getFitAddonJS', () => {
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: Shared UI Components
 // ═══════════════════════════════════════════════════════════════════════
-ipcMain.handle('ui:getSharedCSS', () => {
-  const cssPath = path.join(SRC_DIR, 'styles', 'plugin-components.css');
+ipcMain.handle("ui:getSharedCSS", () => {
+  const cssPath = path.join(SRC_DIR, "styles", "plugin-components.css");
   try {
     if (fs.existsSync(cssPath)) {
-      return fs.readFileSync(cssPath, 'utf-8');
+      return fs.readFileSync(cssPath, "utf-8");
     }
-    return '';
+    return "";
   } catch {
-    return '';
+    return "";
   }
 });
 
@@ -952,9 +1036,9 @@ ipcMain.handle('ui:getSharedCSS', () => {
  * List remote directory via SFTP.
  * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
  */
-ipcMain.handle('ssh:sftpListDir', async (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpListDir", async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 3;
   const baseDelay = 300;
@@ -962,7 +1046,7 @@ ipcMain.handle('ssh:sftpListDir', async (event, connectionId, remotePath) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     try {
@@ -975,14 +1059,17 @@ ipcMain.handle('ssh:sftpListDir', async (event, connectionId, remotePath) => {
             return;
           }
 
-          const entries = list.map(item => ({
+          const entries = list.map((item) => ({
             name: item.filename,
             size: item.attrs.size || 0,
             modifyTime: item.attrs.mtime ? item.attrs.mtime * 1000 : null,
             isDirectory: (item.attrs.mode & 0o40000) !== 0,
             isFile: (item.attrs.mode & 0o100000) !== 0,
             isSymlink: (item.attrs.mode & 0o120000) !== 0,
-            path: remotePath === '/' ? '/' + item.filename : remotePath + '/' + item.filename,
+            path:
+              remotePath === "/"
+                ? "/" + item.filename
+                : remotePath + "/" + item.filename,
           }));
 
           // Sort: directories first, then alphabetical
@@ -999,42 +1086,48 @@ ipcMain.handle('ssh:sftpListDir', async (event, connectionId, remotePath) => {
       if (result.success) return result;
 
       // Check if channel-related error → retry
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (result.error || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
-        console.log(`[SFTP:ListDir] Channel error on attempt ${attempt + 1}/${maxRetries + 1}, retrying...`);
+        console.log(
+          `[SFTP:ListDir] Channel error on attempt ${attempt + 1}/${maxRetries + 1}, retrying...`,
+        );
         continue;
       }
 
       return result;
     } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (err.message || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
-        console.log(`[SFTP:ListDir] Channel exception on attempt ${attempt + 1}/${maxRetries + 1}, retrying...`);
+        console.log(
+          `[SFTP:ListDir] Channel exception on attempt ${attempt + 1}/${maxRetries + 1}, retrying...`,
+        );
         continue;
       }
       return { success: false, error: err.message };
     }
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: "Max retries exceeded" };
 });
 
 /**
  * Get remote file/directory stats via SFTP.
  */
-ipcMain.handle('ssh:sftpStat', async (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpStat", async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 3;
   const baseDelay = 300;
@@ -1042,7 +1135,7 @@ ipcMain.handle('ssh:sftpStat', async (event, connectionId, remotePath) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     try {
@@ -1061,29 +1154,31 @@ ipcMain.handle('ssh:sftpStat', async (event, connectionId, remotePath) => {
               modifyTime: stats.mtime ? stats.mtime * 1000 : null,
               isDirectory: stats.isDirectory(),
               isFile: stats.isFile(),
-            }
+            },
           });
         });
       });
 
       if (result.success) return result;
 
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (result.error || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
       }
       return result;
     } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (err.message || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
@@ -1092,7 +1187,7 @@ ipcMain.handle('ssh:sftpStat', async (event, connectionId, remotePath) => {
     }
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: "Max retries exceeded" };
 });
 
 /**
@@ -1100,66 +1195,197 @@ ipcMain.handle('ssh:sftpStat', async (event, connectionId, remotePath) => {
  * Reports progress via IPC events.
  * Now uses a reusable SFTP channel.
  */
-ipcMain.handle('ssh:sftpDownload', (event, connectionId, remotePath, localPath, transferId) => {
-  const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+ipcMain.handle(
+  "ssh:sftpDownload",
+  (event, connectionId, remotePath, localPath, transferId) => {
+    const conn = sshConnections.get(connectionId);
+    if (!conn) return { success: false, error: "No active connection" };
 
-  return new Promise((resolve) => {
-    let resolved = false;
-    let retryCount = 0;
-    const maxRetries = 3;
+    return new Promise((resolve) => {
+      let resolved = false;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-    const attemptDownload = async () => {
-      try {
-        // Get or create SFTP channel (now reused!)
-        const sftp = await getSftpChannel(connectionId);
+      const attemptDownload = async () => {
+        try {
+          // Get or create SFTP channel (now reused!)
+          const sftp = await getSftpChannel(connectionId);
 
-        // Get remote file size first for progress
-        sftp.stat(remotePath, (statErr, stats) => {
-          if (statErr) {
-            if (!resolved) {
-              resolved = true;
-              resolve({ success: false, error: statErr.message });
+          // Get remote file size first for progress
+          sftp.stat(remotePath, (statErr, stats) => {
+            if (statErr) {
+              if (!resolved) {
+                resolved = true;
+                resolve({ success: false, error: statErr.message });
+              }
+              return;
             }
+
+            const totalSize = stats.size;
+            let transferred = 0;
+
+            // Use smaller buffer sizes to prevent blocking
+            const readStream = sftp.createReadStream(remotePath, {
+              highWaterMark: 64 * 1024,
+            }); // 64KB buffer
+            const writeStream = fs.createWriteStream(localPath, {
+              highWaterMark: 64 * 1024,
+            }); // 64KB buffer
+
+            // Throttle progress updates to avoid blocking the main thread
+            let lastProgressUpdate = 0;
+            const progressThrottleMs = 100; // Update progress every 100ms max
+
+            readStream.on("data", (chunk) => {
+              transferred += chunk.length;
+              const now = Date.now();
+              if (
+                now - lastProgressUpdate >= progressThrottleMs ||
+                transferred === totalSize
+              ) {
+                lastProgressUpdate = now;
+                if (mainWindow && !mainWindow.isDestroyed()) {
+                  mainWindow.webContents.send("ssh:sftp-progress", {
+                    transferId,
+                    transferred,
+                    total: totalSize,
+                    percent:
+                      totalSize > 0
+                        ? Math.round((transferred / totalSize) * 100)
+                        : 0,
+                  });
+                }
+              }
+            });
+
+            readStream.on("error", (err) => {
+              writeStream.destroy();
+              if (!resolved) {
+                resolved = true;
+                resolve({ success: false, error: err.message });
+              }
+            });
+
+            writeStream.on("error", (err) => {
+              readStream.destroy();
+              if (!resolved) {
+                resolved = true;
+                resolve({ success: false, error: err.message });
+              }
+            });
+
+            writeStream.on("finish", () => {
+              if (!resolved) {
+                resolved = true;
+                resolve({ success: true, transferred });
+              }
+            });
+
+            readStream.pipe(writeStream);
+          });
+        } catch (err) {
+          // Check if this is a channel error that might be transient
+          const isChannelError =
+            err.code === "ECONNRESET" ||
+            err.message.includes("Channel open") ||
+            err.message.includes("open failed");
+
+          if (isChannelError && retryCount < maxRetries) {
+            retryCount++;
+            // Close the bad channel and retry
+            closeSftpChannel(connectionId);
+
+            const delay = 500 * Math.pow(2, retryCount - 1);
+            console.log(
+              `[SSH] Download channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+            );
+            setTimeout(attemptDownload, delay);
             return;
           }
 
-          const totalSize = stats.size;
-          let transferred = 0;
+          if (!resolved) {
+            resolved = true;
+            resolve({ success: false, error: err.message });
+          }
+        }
+      };
+
+      // Start the first attempt
+      attemptDownload();
+    });
+  },
+);
+
+/**
+ * Upload a local file to a remote path via SFTP.
+ * Reports progress via IPC events.
+ * Now uses a reusable SFTP channel.
+ */
+ipcMain.handle(
+  "ssh:sftpUpload",
+  (event, connectionId, localPath, remotePath, transferId) => {
+    const conn = sshConnections.get(connectionId);
+    if (!conn) return { success: false, error: "No active connection" };
+
+    if (!fs.existsSync(localPath)) {
+      return { success: false, error: "Local file not found" };
+    }
+
+    return new Promise((resolve) => {
+      let resolved = false;
+      let retryCount = 0;
+      const maxRetries = 3;
+      const totalSize = fs.statSync(localPath).size;
+      let transferred = 0;
+
+      const attemptUpload = async () => {
+        try {
+          // Get or create SFTP channel (now reused!)
+          const sftp = await getSftpChannel(connectionId);
 
           // Use smaller buffer sizes to prevent blocking
-          const readStream = sftp.createReadStream(remotePath, { highWaterMark: 64 * 1024 }); // 64KB buffer
-          const writeStream = fs.createWriteStream(localPath, { highWaterMark: 64 * 1024 }); // 64KB buffer
+          const readStream = fs.createReadStream(localPath, {
+            highWaterMark: 64 * 1024,
+          }); // 64KB buffer
+          const writeStream = sftp.createWriteStream(remotePath, {
+            highWaterMark: 64 * 1024,
+          }); // 64KB buffer
 
           // Throttle progress updates to avoid blocking the main thread
           let lastProgressUpdate = 0;
           const progressThrottleMs = 100; // Update progress every 100ms max
 
-          readStream.on('data', (chunk) => {
+          readStream.on("data", (chunk) => {
             transferred += chunk.length;
             const now = Date.now();
-            if (now - lastProgressUpdate >= progressThrottleMs || transferred === totalSize) {
+            if (
+              now - lastProgressUpdate >= progressThrottleMs ||
+              transferred === totalSize
+            ) {
               lastProgressUpdate = now;
               if (mainWindow && !mainWindow.isDestroyed()) {
-                mainWindow.webContents.send('ssh:sftp-progress', {
+                mainWindow.webContents.send("ssh:sftp-progress", {
                   transferId,
                   transferred,
                   total: totalSize,
-                  percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
+                  percent:
+                    totalSize > 0
+                      ? Math.round((transferred / totalSize) * 100)
+                      : 0,
                 });
               }
             }
           });
 
-          readStream.on('error', (err) => {
-            writeStream.destroy();
+          readStream.on("error", (err) => {
+            writeStream.end();
             if (!resolved) {
               resolved = true;
               resolve({ success: false, error: err.message });
             }
           });
 
-          writeStream.on('error', (err) => {
+          writeStream.on("error", (err) => {
             readStream.destroy();
             if (!resolved) {
               resolved = true;
@@ -1167,7 +1393,7 @@ ipcMain.handle('ssh:sftpDownload', (event, connectionId, remotePath, localPath, 
             }
           });
 
-          writeStream.on('finish', () => {
+          writeStream.on("close", () => {
             if (!resolved) {
               resolved = true;
               resolve({ success: true, transferred });
@@ -1175,146 +1401,45 @@ ipcMain.handle('ssh:sftpDownload', (event, connectionId, remotePath, localPath, 
           });
 
           readStream.pipe(writeStream);
-        });
+        } catch (err) {
+          // Check if this is a channel error that might be transient
+          const isChannelError =
+            err.code === "ECONNRESET" ||
+            err.message.includes("Channel open") ||
+            err.message.includes("open failed");
 
-      } catch (err) {
-        // Check if this is a channel error that might be transient
-        const isChannelError = err.code === 'ECONNRESET' ||
-                              err.message.includes('Channel open') ||
-                              err.message.includes('open failed');
+          if (isChannelError && retryCount < maxRetries) {
+            retryCount++;
+            // Close the bad channel and retry
+            closeSftpChannel(connectionId);
 
-        if (isChannelError && retryCount < maxRetries) {
-          retryCount++;
-          // Close the bad channel and retry
-          closeSftpChannel(connectionId);
-
-          const delay = 500 * Math.pow(2, retryCount - 1);
-          console.log(`[SSH] Download channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
-          setTimeout(attemptDownload, delay);
-          return;
-        }
-
-        if (!resolved) {
-          resolved = true;
-          resolve({ success: false, error: err.message });
-        }
-      }
-    };
-
-    // Start the first attempt
-    attemptDownload();
-  });
-});
-
-/**
- * Upload a local file to a remote path via SFTP.
- * Reports progress via IPC events.
- * Now uses a reusable SFTP channel.
- */
-ipcMain.handle('ssh:sftpUpload', (event, connectionId, localPath, remotePath, transferId) => {
-  const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
-
-  if (!fs.existsSync(localPath)) {
-    return { success: false, error: 'Local file not found' };
-  }
-
-  return new Promise((resolve) => {
-    let resolved = false;
-    let retryCount = 0;
-    const maxRetries = 3;
-    const totalSize = fs.statSync(localPath).size;
-    let transferred = 0;
-
-    const attemptUpload = async () => {
-      try {
-        // Get or create SFTP channel (now reused!)
-        const sftp = await getSftpChannel(connectionId);
-
-        // Use smaller buffer sizes to prevent blocking
-        const readStream = fs.createReadStream(localPath, { highWaterMark: 64 * 1024 }); // 64KB buffer
-        const writeStream = sftp.createWriteStream(remotePath, { highWaterMark: 64 * 1024 }); // 64KB buffer
-
-        // Throttle progress updates to avoid blocking the main thread
-        let lastProgressUpdate = 0;
-        const progressThrottleMs = 100; // Update progress every 100ms max
-
-        readStream.on('data', (chunk) => {
-          transferred += chunk.length;
-          const now = Date.now();
-          if (now - lastProgressUpdate >= progressThrottleMs || transferred === totalSize) {
-            lastProgressUpdate = now;
-            if (mainWindow && !mainWindow.isDestroyed()) {
-              mainWindow.webContents.send('ssh:sftp-progress', {
-                transferId,
-                transferred,
-                total: totalSize,
-                percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
-              });
-            }
+            const delay = 500 * Math.pow(2, retryCount - 1);
+            console.log(
+              `[SSH] Upload channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+            );
+            setTimeout(attemptUpload, delay);
+            return;
           }
-        });
 
-        readStream.on('error', (err) => {
-          writeStream.end();
           if (!resolved) {
             resolved = true;
             resolve({ success: false, error: err.message });
           }
-        });
-
-        writeStream.on('error', (err) => {
-          readStream.destroy();
-          if (!resolved) {
-            resolved = true;
-            resolve({ success: false, error: err.message });
-          }
-        });
-
-        writeStream.on('close', () => {
-          if (!resolved) {
-            resolved = true;
-            resolve({ success: true, transferred });
-          }
-        });
-
-        readStream.pipe(writeStream);
-
-      } catch (err) {
-        // Check if this is a channel error that might be transient
-        const isChannelError = err.code === 'ECONNRESET' ||
-                              err.message.includes('Channel open') ||
-                              err.message.includes('open failed');
-
-        if (isChannelError && retryCount < maxRetries) {
-          retryCount++;
-          // Close the bad channel and retry
-          closeSftpChannel(connectionId);
-
-          const delay = 500 * Math.pow(2, retryCount - 1);
-          console.log(`[SSH] Upload channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
-          setTimeout(attemptUpload, delay);
-          return;
         }
+      };
 
-        if (!resolved) {
-          resolved = true;
-          resolve({ success: false, error: err.message });
-        }
-      }
-    };
-
-    // Start the first attempt
-    attemptUpload();
-  });
-});
+      // Start the first attempt
+      attemptUpload();
+    });
+  },
+);
 
 /**
  * Create a remote directory via SFTP.
  */
-ipcMain.handle('ssh:sftpMkdir', async (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpMkdir", async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 2;
   const baseDelay = 200;
@@ -1322,7 +1447,7 @@ ipcMain.handle('ssh:sftpMkdir', async (event, connectionId, remotePath) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     try {
@@ -1340,22 +1465,24 @@ ipcMain.handle('ssh:sftpMkdir', async (event, connectionId, remotePath) => {
 
       if (result.success) return result;
 
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (result.error || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
       }
       return result;
     } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (err.message || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
@@ -1364,15 +1491,15 @@ ipcMain.handle('ssh:sftpMkdir', async (event, connectionId, remotePath) => {
     }
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: "Max retries exceeded" };
 });
 
 /**
  * Delete a remote file via SFTP.
  */
-ipcMain.handle('ssh:sftpDelete', async (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpDelete", async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 2;
   const baseDelay = 200;
@@ -1380,7 +1507,7 @@ ipcMain.handle('ssh:sftpDelete', async (event, connectionId, remotePath) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     try {
@@ -1398,22 +1525,24 @@ ipcMain.handle('ssh:sftpDelete', async (event, connectionId, remotePath) => {
 
       if (result.success) return result;
 
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (result.error || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
       }
       return result;
     } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (err.message || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
@@ -1422,15 +1551,15 @@ ipcMain.handle('ssh:sftpDelete', async (event, connectionId, remotePath) => {
     }
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: "Max retries exceeded" };
 });
 
 /**
  * Remove a remote directory via SFTP.
  */
-ipcMain.handle('ssh:sftpRmdir', async (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpRmdir", async (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 2;
   const baseDelay = 200;
@@ -1438,7 +1567,7 @@ ipcMain.handle('ssh:sftpRmdir', async (event, connectionId, remotePath) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     try {
@@ -1456,22 +1585,24 @@ ipcMain.handle('ssh:sftpRmdir', async (event, connectionId, remotePath) => {
 
       if (result.success) return result;
 
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (result.error || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
       }
       return result;
     } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (err.message || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
@@ -1480,73 +1611,78 @@ ipcMain.handle('ssh:sftpRmdir', async (event, connectionId, remotePath) => {
     }
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: "Max retries exceeded" };
 });
 
 /**
  * Rename a remote file/directory via SFTP.
  */
-ipcMain.handle('ssh:sftpRename', async (event, connectionId, oldPath, newPath) => {
-  const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+ipcMain.handle(
+  "ssh:sftpRename",
+  async (event, connectionId, oldPath, newPath) => {
+    const conn = sshConnections.get(connectionId);
+    if (!conn) return { success: false, error: "No active connection" };
 
-  const maxRetries = 2;
-  const baseDelay = 200;
+    const maxRetries = 2;
+    const baseDelay = 200;
 
-  for (let attempt = 0; attempt <= maxRetries; attempt++) {
-    if (attempt > 0) {
-      const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
-    }
+    for (let attempt = 0; attempt <= maxRetries; attempt++) {
+      if (attempt > 0) {
+        const delay = baseDelay * attempt;
+        await new Promise((r) => setTimeout(r, delay));
+      }
 
-    try {
-      const sftp = await getSftpChannel(connectionId);
+      try {
+        const sftp = await getSftpChannel(connectionId);
 
-      const result = await new Promise((resolve) => {
-        sftp.rename(oldPath, newPath, (err) => {
-          if (err) {
-            resolve({ success: false, error: err.message });
-          } else {
-            resolve({ success: true });
-          }
+        const result = await new Promise((resolve) => {
+          sftp.rename(oldPath, newPath, (err) => {
+            if (err) {
+              resolve({ success: false, error: err.message });
+            } else {
+              resolve({ success: true });
+            }
+          });
         });
-      });
 
-      if (result.success) return result;
+        if (result.success) return result;
 
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
-      if (isChannelErr && attempt < maxRetries) {
-        closeSftpChannel(connectionId);
-        continue;
+        const errMsg = (result.error || "").toLowerCase();
+        const isChannelErr =
+          errMsg.includes("channel") ||
+          errMsg.includes("open failed") ||
+          errMsg.includes("too many") ||
+          errMsg.includes("resource");
+        if (isChannelErr && attempt < maxRetries) {
+          closeSftpChannel(connectionId);
+          continue;
+        }
+        return result;
+      } catch (err) {
+        const errMsg = (err.message || "").toLowerCase();
+        const isChannelErr =
+          errMsg.includes("channel") ||
+          errMsg.includes("open failed") ||
+          errMsg.includes("too many") ||
+          errMsg.includes("resource");
+        if (isChannelErr && attempt < maxRetries) {
+          closeSftpChannel(connectionId);
+          continue;
+        }
+        return { success: false, error: err.message };
       }
-      return result;
-    } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
-      if (isChannelErr && attempt < maxRetries) {
-        closeSftpChannel(connectionId);
-        continue;
-      }
-      return { success: false, error: err.message };
     }
-  }
 
-  return { success: false, error: 'Max retries exceeded' };
-});
+    return { success: false, error: "Max retries exceeded" };
+  },
+);
 
 /**
  * Resolve remote home directory via SSH command.
  */
-ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
+ipcMain.handle("ssh:sftpHome", async (event, connectionId) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 3;
   const baseDelay = 300;
@@ -1554,7 +1690,7 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
   for (let attempt = 0; attempt <= maxRetries; attempt++) {
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     try {
@@ -1562,22 +1698,23 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
       const sftp = await getSftpChannel(connectionId);
 
       const result = await new Promise((resolve) => {
-        sftp.realpath('.', (err, absPath) => {
+        sftp.realpath(".", (err, absPath) => {
           if (err) {
             resolve({ success: false, error: err.message });
           } else {
-            resolve({ success: true, path: absPath || '/' });
+            resolve({ success: true, path: absPath || "/" });
           }
         });
       });
 
       if (result.success) return result;
 
-      const errMsg = (result.error || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (result.error || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
@@ -1587,16 +1724,18 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
       if (attempt === 0) {
         try {
           const execResult = await new Promise((resolve) => {
-            conn.exec('echo ~', (err, stream) => {
+            conn.exec("echo ~", (err, stream) => {
               if (err) {
                 resolve({ success: false, error: err.message });
                 return;
               }
-              let output = '';
-              stream.on('data', (data) => { output += data.toString(); });
-              stream.stderr.on('data', () => {});
-              stream.on('close', () => {
-                resolve({ success: true, path: output.trim() || '/' });
+              let output = "";
+              stream.on("data", (data) => {
+                output += data.toString();
+              });
+              stream.stderr.on("data", () => {});
+              stream.on("close", () => {
+                resolve({ success: true, path: output.trim() || "/" });
               });
             });
           });
@@ -1608,11 +1747,12 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
 
       return result;
     } catch (err) {
-      const errMsg = (err.message || '').toLowerCase();
-      const isChannelErr = errMsg.includes('channel') ||
-                           errMsg.includes('open failed') ||
-                           errMsg.includes('too many') ||
-                           errMsg.includes('resource');
+      const errMsg = (err.message || "").toLowerCase();
+      const isChannelErr =
+        errMsg.includes("channel") ||
+        errMsg.includes("open failed") ||
+        errMsg.includes("too many") ||
+        errMsg.includes("resource");
       if (isChannelErr && attempt < maxRetries) {
         closeSftpChannel(connectionId);
         continue;
@@ -1622,16 +1762,18 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
       if (attempt === maxRetries) {
         try {
           const execResult = await new Promise((resolve) => {
-            conn.exec('echo ~', (err, stream) => {
+            conn.exec("echo ~", (err, stream) => {
               if (err) {
                 resolve({ success: false, error: err.message });
                 return;
               }
-              let output = '';
-              stream.on('data', (data) => { output += data.toString(); });
-              stream.stderr.on('data', () => {});
-              stream.on('close', () => {
-                resolve({ success: true, path: output.trim() || '/' });
+              let output = "";
+              stream.on("data", (data) => {
+                output += data.toString();
+              });
+              stream.stderr.on("data", () => {});
+              stream.on("close", () => {
+                resolve({ success: true, path: output.trim() || "/" });
               });
             });
           });
@@ -1645,7 +1787,7 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
     }
   }
 
-  return { success: false, error: 'Max retries exceeded' };
+  return { success: false, error: "Max retries exceeded" };
 });
 
 /**
@@ -1653,9 +1795,9 @@ ipcMain.handle('ssh:sftpHome', async (event, connectionId) => {
  * Returns { success, stdout, stderr, exitCode }
  * Includes automatic retry with backoff for channel exhaustion errors.
  */
-ipcMain.handle('ssh:exec', async (event, connectionId, command) => {
+ipcMain.handle("ssh:exec", async (event, connectionId, command) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   const maxRetries = 3;
   const baseDelay = 300; // ms
@@ -1664,29 +1806,43 @@ ipcMain.handle('ssh:exec', async (event, connectionId, command) => {
     // If this is a retry, wait with exponential backoff before trying again
     if (attempt > 0) {
       const delay = baseDelay * attempt;
-      await new Promise(r => setTimeout(r, delay));
+      await new Promise((r) => setTimeout(r, delay));
     }
 
     const result = await new Promise((resolve) => {
       conn.exec(command, (err, stream) => {
         if (err) {
-          resolve({ success: false, error: err.message, stdout: '', stderr: err.message, exitCode: -1, _channelError: true });
+          resolve({
+            success: false,
+            error: err.message,
+            stdout: "",
+            stderr: err.message,
+            exitCode: -1,
+            _channelError: true,
+          });
           return;
         }
-        let stdout = '';
-        let stderr = '';
+        let stdout = "";
+        let stderr = "";
         let exitCode = 0;
 
-        stream.on('data', (data) => { stdout += data.toString(); });
-        stream.stderr.on('data', (data) => { stderr += data.toString(); });
-        stream.on('close', (code) => {
+        stream.on("data", (data) => {
+          stdout += data.toString();
+        });
+        stream.stderr.on("data", (data) => {
+          stderr += data.toString();
+        });
+        stream.on("close", (code) => {
           exitCode = code || 0;
           resolve({
             success: exitCode === 0,
             stdout: stdout.trim(),
             stderr: stderr.trim(),
             exitCode: exitCode,
-            error: exitCode !== 0 ? stderr.trim() || 'Command failed (exit ' + exitCode + ')' : null,
+            error:
+              exitCode !== 0
+                ? stderr.trim() || "Command failed (exit " + exitCode + ")"
+                : null,
             _channelError: false,
           });
         });
@@ -1701,11 +1857,12 @@ ipcMain.handle('ssh:exec', async (event, connectionId, command) => {
     }
 
     // Check if the error is a transient channel error worth retrying
-    const errMsg = (result.error || '').toLowerCase();
-    const isChannelErr = errMsg.includes('channel') ||
-                         errMsg.includes('open failed') ||
-                         errMsg.includes('too many') ||
-                         errMsg.includes('resource');
+    const errMsg = (result.error || "").toLowerCase();
+    const isChannelErr =
+      errMsg.includes("channel") ||
+      errMsg.includes("open failed") ||
+      errMsg.includes("too many") ||
+      errMsg.includes("resource");
 
     if (!isChannelErr || attempt >= maxRetries) {
       delete result._channelError;
@@ -1713,11 +1870,19 @@ ipcMain.handle('ssh:exec', async (event, connectionId, command) => {
     }
 
     // Channel error — will retry on next loop iteration
-    console.log(`[SSH:exec] Channel error on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${baseDelay * (attempt + 1)}ms...`);
+    console.log(
+      `[SSH:exec] Channel error on attempt ${attempt + 1}/${maxRetries + 1}, retrying in ${baseDelay * (attempt + 1)}ms...`,
+    );
   }
 
   // Should not reach here, but safety fallback
-  return { success: false, error: 'Max retries exceeded', stdout: '', stderr: '', exitCode: -1 };
+  return {
+    success: false,
+    error: "Max retries exceeded",
+    stdout: "",
+    stderr: "",
+    exitCode: -1,
+  };
 });
 
 /**
@@ -1725,9 +1890,9 @@ ipcMain.handle('ssh:exec', async (event, connectionId, command) => {
  * Uses reusable SFTP channel with retry logic for channel errors.
  * Returns { success, content } or { success: false, error }
  */
-ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpReadFile", (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   return new Promise((resolve) => {
     let resolved = false;
@@ -1742,21 +1907,24 @@ ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
         const chunks = [];
         const readStream = sftp.createReadStream(remotePath);
 
-        readStream.on('data', (chunk) => {
+        readStream.on("data", (chunk) => {
           chunks.push(chunk);
         });
 
-        readStream.on('error', (readErr) => {
+        readStream.on("error", (readErr) => {
           if (!resolved) {
-            const isChannelError = readErr.code === 'ECONNRESET' ||
-                                  readErr.message.includes('Channel open') ||
-                                  readErr.message.includes('open failed');
+            const isChannelError =
+              readErr.code === "ECONNRESET" ||
+              readErr.message.includes("Channel open") ||
+              readErr.message.includes("open failed");
 
             if (isChannelError && retryCount < maxRetries) {
               retryCount++;
               closeSftpChannel(connectionId);
               const delay = 500 * Math.pow(2, retryCount - 1);
-              console.log(`[SSH] Read stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+              console.log(
+                `[SSH] Read stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+              );
               setTimeout(attemptRead, delay);
               return;
             }
@@ -1766,25 +1934,27 @@ ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
           }
         });
 
-        readStream.on('close', () => {
+        readStream.on("close", () => {
           if (!resolved) {
             resolved = true;
-            const content = Buffer.concat(chunks).toString('utf-8');
+            const content = Buffer.concat(chunks).toString("utf-8");
             resolve({ success: true, content: content });
           }
         });
-
       } catch (err) {
         // getSftpChannel() threw — check if this is a transient channel error
-        const isChannelError = err.code === 'ECONNRESET' ||
-                              err.message.includes('Channel open') ||
-                              err.message.includes('open failed');
+        const isChannelError =
+          err.code === "ECONNRESET" ||
+          err.message.includes("Channel open") ||
+          err.message.includes("open failed");
 
         if (isChannelError && retryCount < maxRetries) {
           retryCount++;
           closeSftpChannel(connectionId);
           const delay = 500 * Math.pow(2, retryCount - 1);
-          console.log(`[SSH] Read channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          console.log(
+            `[SSH] Read channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+          );
           setTimeout(attemptRead, delay);
           return;
         }
@@ -1806,9 +1976,9 @@ ipcMain.handle('ssh:sftpReadFile', (event, connectionId, remotePath) => {
  * Uses reusable SFTP channel with retry logic for channel errors.
  * Returns { success, content } or { success: false, error }
  */
-ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
+ipcMain.handle("ssh:sftpReadFileBase64", (event, connectionId, remotePath) => {
   const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+  if (!conn) return { success: false, error: "No active connection" };
 
   return new Promise((resolve) => {
     let resolved = false;
@@ -1823,21 +1993,24 @@ ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
         const chunks = [];
         const readStream = sftp.createReadStream(remotePath);
 
-        readStream.on('data', (chunk) => {
+        readStream.on("data", (chunk) => {
           chunks.push(chunk);
         });
 
-        readStream.on('error', (readErr) => {
+        readStream.on("error", (readErr) => {
           if (!resolved) {
-            const isChannelError = readErr.code === 'ECONNRESET' ||
-                                  readErr.message.includes('Channel open') ||
-                                  readErr.message.includes('open failed');
+            const isChannelError =
+              readErr.code === "ECONNRESET" ||
+              readErr.message.includes("Channel open") ||
+              readErr.message.includes("open failed");
 
             if (isChannelError && retryCount < maxRetries) {
               retryCount++;
               closeSftpChannel(connectionId);
               const delay = 500 * Math.pow(2, retryCount - 1);
-              console.log(`[SSH] ReadBase64 stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+              console.log(
+                `[SSH] ReadBase64 stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+              );
               setTimeout(attemptRead, delay);
               return;
             }
@@ -1847,25 +2020,27 @@ ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
           }
         });
 
-        readStream.on('close', () => {
+        readStream.on("close", () => {
           if (!resolved) {
             resolved = true;
-            const content = Buffer.concat(chunks).toString('base64');
+            const content = Buffer.concat(chunks).toString("base64");
             resolve({ success: true, content: content });
           }
         });
-
       } catch (err) {
         // getSftpChannel() threw — check if this is a transient channel error
-        const isChannelError = err.code === 'ECONNRESET' ||
-                              err.message.includes('Channel open') ||
-                              err.message.includes('open failed');
+        const isChannelError =
+          err.code === "ECONNRESET" ||
+          err.message.includes("Channel open") ||
+          err.message.includes("open failed");
 
         if (isChannelError && retryCount < maxRetries) {
           retryCount++;
           closeSftpChannel(connectionId);
           const delay = 500 * Math.pow(2, retryCount - 1);
-          console.log(`[SSH] ReadBase64 channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
+          console.log(
+            `[SSH] ReadBase64 channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+          );
           setTimeout(attemptRead, delay);
           return;
         }
@@ -1886,83 +2061,91 @@ ipcMain.handle('ssh:sftpReadFileBase64', (event, connectionId, remotePath) => {
  * Uses reusable SFTP channel with retry logic for channel errors.
  * Returns { success: true } or { success: false, error }
  */
-ipcMain.handle('ssh:sftpWriteFile', (event, connectionId, remotePath, content) => {
-  const conn = sshConnections.get(connectionId);
-  if (!conn) return { success: false, error: 'No active connection' };
+ipcMain.handle(
+  "ssh:sftpWriteFile",
+  (event, connectionId, remotePath, content) => {
+    const conn = sshConnections.get(connectionId);
+    if (!conn) return { success: false, error: "No active connection" };
 
-  return new Promise((resolve) => {
-    let resolved = false;
-    let retryCount = 0;
-    const maxRetries = 3;
+    return new Promise((resolve) => {
+      let resolved = false;
+      let retryCount = 0;
+      const maxRetries = 3;
 
-    const attemptWrite = async () => {
-      try {
-        // Reuse existing SFTP channel to avoid "Channel open failure" errors
-        const sftp = await getSftpChannel(connectionId);
+      const attemptWrite = async () => {
+        try {
+          // Reuse existing SFTP channel to avoid "Channel open failure" errors
+          const sftp = await getSftpChannel(connectionId);
 
-        const writeStream = sftp.createWriteStream(remotePath);
+          const writeStream = sftp.createWriteStream(remotePath);
 
-        writeStream.on('error', (writeErr) => {
-          if (!resolved) {
-            // Check if this is a channel error that might be transient
-            const isChannelError = writeErr.code === 'ECONNRESET' ||
-                                  writeErr.message.includes('Channel open') ||
-                                  writeErr.message.includes('open failed');
+          writeStream.on("error", (writeErr) => {
+            if (!resolved) {
+              // Check if this is a channel error that might be transient
+              const isChannelError =
+                writeErr.code === "ECONNRESET" ||
+                writeErr.message.includes("Channel open") ||
+                writeErr.message.includes("open failed");
 
-            if (isChannelError && retryCount < maxRetries) {
-              retryCount++;
-              closeSftpChannel(connectionId);
-              const delay = 500 * Math.pow(2, retryCount - 1);
-              console.log(`[SSH] Write stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
-              setTimeout(attemptWrite, delay);
-              return;
+              if (isChannelError && retryCount < maxRetries) {
+                retryCount++;
+                closeSftpChannel(connectionId);
+                const delay = 500 * Math.pow(2, retryCount - 1);
+                console.log(
+                  `[SSH] Write stream error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+                );
+                setTimeout(attemptWrite, delay);
+                return;
+              }
+
+              resolved = true;
+              resolve({ success: false, error: writeErr.message });
             }
+          });
 
-            resolved = true;
-            resolve({ success: false, error: writeErr.message });
+          writeStream.on("close", () => {
+            if (!resolved) {
+              resolved = true;
+              resolve({ success: true });
+            }
+          });
+
+          writeStream.end(content, "utf-8");
+        } catch (err) {
+          // getSftpChannel() threw — check if this is a transient channel error
+          const isChannelError =
+            err.code === "ECONNRESET" ||
+            err.message.includes("Channel open") ||
+            err.message.includes("open failed");
+
+          if (isChannelError && retryCount < maxRetries) {
+            retryCount++;
+            closeSftpChannel(connectionId);
+            const delay = 500 * Math.pow(2, retryCount - 1);
+            console.log(
+              `[SSH] Write channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`,
+            );
+            setTimeout(attemptWrite, delay);
+            return;
           }
-        });
 
-        writeStream.on('close', () => {
           if (!resolved) {
             resolved = true;
-            resolve({ success: true });
+            resolve({ success: false, error: err.message });
           }
-        });
-
-        writeStream.end(content, 'utf-8');
-
-      } catch (err) {
-        // getSftpChannel() threw — check if this is a transient channel error
-        const isChannelError = err.code === 'ECONNRESET' ||
-                              err.message.includes('Channel open') ||
-                              err.message.includes('open failed');
-
-        if (isChannelError && retryCount < maxRetries) {
-          retryCount++;
-          closeSftpChannel(connectionId);
-          const delay = 500 * Math.pow(2, retryCount - 1);
-          console.log(`[SSH] Write channel error, retry ${retryCount}/${maxRetries} after ${delay}ms`);
-          setTimeout(attemptWrite, delay);
-          return;
         }
+      };
 
-        if (!resolved) {
-          resolved = true;
-          resolve({ success: false, error: err.message });
-        }
-      }
-    };
-
-    attemptWrite();
-  });
-});
+      attemptWrite();
+    });
+  },
+);
 
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: FTP Connection
 // ═══════════════════════════════════════════════════════════════════════
 
-ipcMain.handle('ftp:connect', async (event, profile) => {
+ipcMain.handle("ftp:connect", async (event, profile) => {
   const client = new ftp.Client();
   client.ftp.verbose = false;
   const connId = profile.id || Date.now().toString();
@@ -1970,8 +2153,8 @@ ipcMain.handle('ftp:connect', async (event, profile) => {
   const ftpConfig = {
     host: profile.host,
     port: profile.port || 21,
-    user: profile.username || 'anonymous',
-    password: profile.password || '',
+    user: profile.username || "anonymous",
+    password: profile.password || "",
     secure: false, // Can be extended for FTPS
   };
 
@@ -1980,11 +2163,11 @@ ipcMain.handle('ftp:connect', async (event, profile) => {
     ftpConnections.set(connId, { client, profile });
     return { success: true, connectionId: connId };
   } catch (err) {
-    return { success: false, error: err.message || 'FTP connection failed' };
+    return { success: false, error: err.message || "FTP connection failed" };
   }
 });
 
-ipcMain.handle('ftp:disconnect', (event, connectionId) => {
+ipcMain.handle("ftp:disconnect", (event, connectionId) => {
   const entry = ftpConnections.get(connectionId);
   if (entry) {
     entry.client.close();
@@ -2002,20 +2185,20 @@ ipcMain.handle('ftp:disconnect', (event, connectionId) => {
  * List remote directory via FTP.
  * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
  */
-ipcMain.handle('ftp:listDir', async (event, connectionId, remotePath) => {
+ipcMain.handle("ftp:listDir", async (event, connectionId, remotePath) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
   try {
     const list = await entry.client.list(remotePath);
-    const entries = list.map(item => ({
+    const entries = list.map((item) => ({
       name: item.name,
       size: item.size || 0,
       modifyTime: item.modifiedAt ? new Date(item.modifiedAt).getTime() : null,
       isDirectory: item.isDirectory,
       isFile: item.isFile,
       isSymlink: item.isSymbolicLink,
-      path: remotePath === '/' ? '/' + item.name : remotePath + '/' + item.name,
+      path: remotePath === "/" ? "/" + item.name : remotePath + "/" + item.name,
     }));
 
     // Sort: directories first, then alphabetical
@@ -2027,7 +2210,7 @@ ipcMain.handle('ftp:listDir', async (event, connectionId, remotePath) => {
 
     return { success: true, entries };
   } catch (err) {
-    return { success: false, error: err.message || 'Failed to list directory' };
+    return { success: false, error: err.message || "Failed to list directory" };
   }
 });
 
@@ -2035,100 +2218,108 @@ ipcMain.handle('ftp:listDir', async (event, connectionId, remotePath) => {
  * Download a remote file to a local path via FTP.
  * Reports progress via IPC events using a Transform stream.
  */
-ipcMain.handle('ftp:download', async (event, connectionId, remotePath, localPath, transferId) => {
-  const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+ipcMain.handle(
+  "ftp:download",
+  async (event, connectionId, remotePath, localPath, transferId) => {
+    const entry = ftpConnections.get(connectionId);
+    if (!entry) return { success: false, error: "No active FTP connection" };
 
-  try {
-    // Get file size for progress tracking
-    let totalSize = 0;
     try {
-      const dirPath = remotePath.substring(0, remotePath.lastIndexOf('/')) || '/';
-      const fileName = remotePath.substring(remotePath.lastIndexOf('/') + 1);
-      const list = await entry.client.list(dirPath);
-      const fileInfo = list.find(f => f.name === fileName);
-      if (fileInfo) totalSize = fileInfo.size || 0;
-    } catch (e) {
-      // Size detection is best-effort
-    }
-
-    const writeStream = fs.createWriteStream(localPath);
-    let transferred = 0;
-
-    // Use a Transform stream to intercept data and report progress
-    const progressStream = new Transform({
-      transform(chunk, encoding, callback) {
-        transferred += chunk.length;
-        if (mainWindow && !mainWindow.isDestroyed()) {
-          mainWindow.webContents.send('ftp:progress', {
-            transferId,
-            transferred,
-            total: totalSize,
-            percent: totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0
-          });
-        }
-        callback(null, chunk);
+      // Get file size for progress tracking
+      let totalSize = 0;
+      try {
+        const dirPath =
+          remotePath.substring(0, remotePath.lastIndexOf("/")) || "/";
+        const fileName = remotePath.substring(remotePath.lastIndexOf("/") + 1);
+        const list = await entry.client.list(dirPath);
+        const fileInfo = list.find((f) => f.name === fileName);
+        if (fileInfo) totalSize = fileInfo.size || 0;
+      } catch (e) {
+        // Size detection is best-effort
       }
-    });
 
-    progressStream.pipe(writeStream);
+      const writeStream = fs.createWriteStream(localPath);
+      let transferred = 0;
 
-    await entry.client.downloadTo(progressStream, remotePath);
-
-    // Ensure final 100% progress is sent
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ftp:progress', {
-        transferId,
-        transferred: totalSize,
-        total: totalSize,
-        percent: 100
+      // Use a Transform stream to intercept data and report progress
+      const progressStream = new Transform({
+        transform(chunk, encoding, callback) {
+          transferred += chunk.length;
+          if (mainWindow && !mainWindow.isDestroyed()) {
+            mainWindow.webContents.send("ftp:progress", {
+              transferId,
+              transferred,
+              total: totalSize,
+              percent:
+                totalSize > 0 ? Math.round((transferred / totalSize) * 100) : 0,
+            });
+          }
+          callback(null, chunk);
+        },
       });
-    }
 
-    return { success: true, transferred: totalSize };
-  } catch (err) {
-    return { success: false, error: err.message || 'Download failed' };
-  }
-});
+      progressStream.pipe(writeStream);
+
+      await entry.client.downloadTo(progressStream, remotePath);
+
+      // Ensure final 100% progress is sent
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("ftp:progress", {
+          transferId,
+          transferred: totalSize,
+          total: totalSize,
+          percent: 100,
+        });
+      }
+
+      return { success: true, transferred: totalSize };
+    } catch (err) {
+      return { success: false, error: err.message || "Download failed" };
+    }
+  },
+);
 
 /**
  * Upload a local file to a remote path via FTP.
  * Reports progress via IPC events.
  */
-ipcMain.handle('ftp:upload', async (event, connectionId, localPath, remotePath, transferId) => {
-  const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+ipcMain.handle(
+  "ftp:upload",
+  async (event, connectionId, localPath, remotePath, transferId) => {
+    const entry = ftpConnections.get(connectionId);
+    if (!entry) return { success: false, error: "No active FTP connection" };
 
-  if (!fs.existsSync(localPath)) {
-    return { success: false, error: 'Local file not found' };
-  }
-
-  try {
-    const totalSize = fs.statSync(localPath).size;
-
-    await entry.client.uploadFrom(localPath, remotePath);
-
-    if (mainWindow && !mainWindow.isDestroyed()) {
-      mainWindow.webContents.send('ftp:progress', {
-        transferId,
-        transferred: totalSize,
-        total: totalSize,
-        percent: 100
-      });
+    if (!fs.existsSync(localPath)) {
+      return { success: false, error: "Local file not found" };
     }
 
-    return { success: true, transferred: totalSize };
-  } catch (err) {
-    return { success: false, error: err.message || 'Upload failed' };
-  }
-});
+    try {
+      const totalSize = fs.statSync(localPath).size;
+
+      await entry.client.uploadFrom(localPath, remotePath);
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("ftp:progress", {
+          transferId,
+          transferred: totalSize,
+          total: totalSize,
+          percent: 100,
+        });
+      }
+
+      return { success: true, transferred: totalSize };
+    } catch (err) {
+      return { success: false, error: err.message || "Upload failed" };
+    }
+  },
+);
 
 /**
  * Create a remote directory via FTP.
  */
-ipcMain.handle('ftp:mkdir', async (event, connectionId, remotePath) => {
+ipcMain.handle("ftp:mkdir", async (event, connectionId, remotePath) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
   try {
     await entry.client.ensureDir(remotePath);
@@ -2141,9 +2332,9 @@ ipcMain.handle('ftp:mkdir', async (event, connectionId, remotePath) => {
 /**
  * Delete a remote file via FTP.
  */
-ipcMain.handle('ftp:delete', async (event, connectionId, remotePath) => {
+ipcMain.handle("ftp:delete", async (event, connectionId, remotePath) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
   try {
     await entry.client.remove(remotePath);
@@ -2156,9 +2347,9 @@ ipcMain.handle('ftp:delete', async (event, connectionId, remotePath) => {
 /**
  * Remove a remote directory via FTP.
  */
-ipcMain.handle('ftp:rmdir', async (event, connectionId, remotePath) => {
+ipcMain.handle("ftp:rmdir", async (event, connectionId, remotePath) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
   try {
     await entry.client.removeEmptyDir(remotePath);
@@ -2171,9 +2362,9 @@ ipcMain.handle('ftp:rmdir', async (event, connectionId, remotePath) => {
 /**
  * Rename a remote file/directory via FTP.
  */
-ipcMain.handle('ftp:rename', async (event, connectionId, oldPath, newPath) => {
+ipcMain.handle("ftp:rename", async (event, connectionId, oldPath, newPath) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
   try {
     await entry.client.rename(oldPath, newPath);
@@ -2186,13 +2377,13 @@ ipcMain.handle('ftp:rename', async (event, connectionId, oldPath, newPath) => {
 /**
  * Get the current working directory via FTP (resolves "home" directory).
  */
-ipcMain.handle('ftp:home', async (event, connectionId) => {
+ipcMain.handle("ftp:home", async (event, connectionId) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
   try {
     const pwd = await entry.client.pwd();
-    return { success: true, path: pwd || '/' };
+    return { success: true, path: pwd || "/" };
   } catch (err) {
     return { success: false, error: err.message };
   }
@@ -2202,41 +2393,109 @@ ipcMain.handle('ftp:home', async (event, connectionId) => {
  * Read a remote file's text content via FTP.
  * Downloads to a temp file, reads it, then deletes the temp file.
  */
-ipcMain.handle('ftp:readFile', async (event, connectionId, remotePath) => {
+ipcMain.handle("ftp:readFile", async (event, connectionId, remotePath) => {
   const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+  if (!entry) return { success: false, error: "No active FTP connection" };
 
-  const tmpPath = path.join(os.tmpdir(), 'termulos_ftp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
+  const tmpPath = path.join(
+    os.tmpdir(),
+    "termulos_ftp_" +
+      Date.now() +
+      "_" +
+      Math.random().toString(36).substring(2, 8),
+  );
   try {
     await entry.client.downloadTo(tmpPath, remotePath);
-    const content = fs.readFileSync(tmpPath, 'utf-8');
-    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore cleanup error */ }
+    const content = fs.readFileSync(tmpPath, "utf-8");
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (e) {
+      /* ignore cleanup error */
+    }
     return { success: true, content: content };
   } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
+    try {
+      fs.unlinkSync(tmpPath);
+    } catch (e) {
+      /* ignore */
+    }
     return { success: false, error: err.message };
   }
 });
 
 /**
+ * Read a remote file via FTP and return its content as base64.
+ * Used for binary files (images, PDFs) by the file-viewer plugin.
+ */
+ipcMain.handle(
+  "ftp:readFileBase64",
+  async (event, connectionId, remotePath) => {
+    const entry = ftpConnections.get(connectionId);
+    if (!entry) return { success: false, error: "No active FTP connection" };
+
+    const tmpPath = path.join(
+      os.tmpdir(),
+      "termulos_ftp_" +
+        Date.now() +
+        "_" +
+        Math.random().toString(36).substring(2, 8),
+    );
+    try {
+      await entry.client.downloadTo(tmpPath, remotePath);
+      const content = fs.readFileSync(tmpPath).toString("base64");
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (e) {
+        /* ignore cleanup error */
+      }
+      return { success: true, content: content };
+    } catch (err) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (e) {
+        /* ignore */
+      }
+      return { success: false, error: err.message };
+    }
+  },
+);
+
+/**
  * Write text content to a remote file via FTP.
  * Writes to a temp file, uploads it, then deletes the temp file.
  */
-ipcMain.handle('ftp:writeFile', async (event, connectionId, remotePath, content) => {
-  const entry = ftpConnections.get(connectionId);
-  if (!entry) return { success: false, error: 'No active FTP connection' };
+ipcMain.handle(
+  "ftp:writeFile",
+  async (event, connectionId, remotePath, content) => {
+    const entry = ftpConnections.get(connectionId);
+    if (!entry) return { success: false, error: "No active FTP connection" };
 
-  const tmpPath = path.join(os.tmpdir(), 'termulos_ftp_' + Date.now() + '_' + Math.random().toString(36).substring(2, 8));
-  try {
-    fs.writeFileSync(tmpPath, content, 'utf-8');
-    await entry.client.uploadFrom(tmpPath, remotePath);
-    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
-    return { success: true };
-  } catch (err) {
-    try { fs.unlinkSync(tmpPath); } catch (e) { /* ignore */ }
-    return { success: false, error: err.message };
-  }
-});
+    const tmpPath = path.join(
+      os.tmpdir(),
+      "termulos_ftp_" +
+        Date.now() +
+        "_" +
+        Math.random().toString(36).substring(2, 8),
+    );
+    try {
+      fs.writeFileSync(tmpPath, content, "utf-8");
+      await entry.client.uploadFrom(tmpPath, remotePath);
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (e) {
+        /* ignore */
+      }
+      return { success: true };
+    } catch (err) {
+      try {
+        fs.unlinkSync(tmpPath);
+      } catch (e) {
+        /* ignore */
+      }
+      return { success: false, error: err.message };
+    }
+  },
+);
 
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: Local Filesystem
@@ -2246,14 +2505,14 @@ ipcMain.handle('ftp:writeFile', async (event, connectionId, remotePath, content)
  * List local directory contents.
  * Returns array of { name, size, modifyTime, isDirectory, isFile, path }
  */
-ipcMain.handle('fs:listDir', (event, dirPath) => {
+ipcMain.handle("fs:listDir", (event, dirPath) => {
   try {
     const resolved = path.resolve(dirPath);
     const entries = fs.readdirSync(resolved, { withFileTypes: true });
 
     const items = entries
-      .filter(entry => !entry.name.startsWith('.'))
-      .map(entry => {
+      .filter((entry) => !entry.name.startsWith("."))
+      .map((entry) => {
         const fullPath = path.join(resolved, entry.name);
         let size = 0;
         let modifyTime = null;
@@ -2288,19 +2547,19 @@ ipcMain.handle('fs:listDir', (event, dirPath) => {
 /**
  * Get common user directories.
  */
-ipcMain.handle('fs:userDirs', () => {
+ipcMain.handle("fs:userDirs", () => {
   return {
-    home: app.getPath('home'),
-    desktop: app.getPath('desktop'),
-    documents: app.getPath('documents'),
-    downloads: app.getPath('downloads'),
+    home: app.getPath("home"),
+    desktop: app.getPath("desktop"),
+    documents: app.getPath("documents"),
+    downloads: app.getPath("downloads"),
   };
 });
 
 /**
  * Delete a local file.
  */
-ipcMain.handle('fs:deleteFile', (event, filePath) => {
+ipcMain.handle("fs:deleteFile", (event, filePath) => {
   try {
     const resolved = path.resolve(filePath);
     fs.unlinkSync(resolved);
@@ -2313,7 +2572,7 @@ ipcMain.handle('fs:deleteFile', (event, filePath) => {
 /**
  * Create a local directory.
  */
-ipcMain.handle('fs:mkdir', (event, dirPath) => {
+ipcMain.handle("fs:mkdir", (event, dirPath) => {
   try {
     const resolved = path.resolve(dirPath);
     fs.mkdirSync(resolved, { recursive: false });
@@ -2326,11 +2585,11 @@ ipcMain.handle('fs:mkdir', (event, dirPath) => {
 /**
  * Create an empty local file (like touch).
  */
-ipcMain.handle('fs:createFile', (event, filePath) => {
+ipcMain.handle("fs:createFile", (event, filePath) => {
   try {
     const resolved = path.resolve(filePath);
     // Close immediately to create empty file
-    fs.closeSync(fs.openSync(resolved, 'w'));
+    fs.closeSync(fs.openSync(resolved, "w"));
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -2340,7 +2599,7 @@ ipcMain.handle('fs:createFile', (event, filePath) => {
 /**
  * Delete a local file or directory recursively.
  */
-ipcMain.handle('fs:deletePath', (event, targetPath) => {
+ipcMain.handle("fs:deletePath", (event, targetPath) => {
   try {
     const resolved = path.resolve(targetPath);
     const stat = fs.statSync(resolved);
@@ -2358,10 +2617,10 @@ ipcMain.handle('fs:deletePath', (event, targetPath) => {
 /**
  * Read a local file and return its content as text.
  */
-ipcMain.handle('fs:readFile', (event, filePath, encoding) => {
+ipcMain.handle("fs:readFile", (event, filePath, encoding) => {
   try {
     const resolved = path.resolve(filePath);
-    const content = fs.readFileSync(resolved, encoding || 'utf-8');
+    const content = fs.readFileSync(resolved, encoding || "utf-8");
     return { success: true, content: content };
   } catch (err) {
     return { success: false, error: err.message };
@@ -2371,10 +2630,10 @@ ipcMain.handle('fs:readFile', (event, filePath, encoding) => {
 /**
  * Write text content to a local file.
  */
-ipcMain.handle('fs:writeFile', (event, filePath, content, encoding) => {
+ipcMain.handle("fs:writeFile", (event, filePath, content, encoding) => {
   try {
     const resolved = path.resolve(filePath);
-    fs.writeFileSync(resolved, content, encoding || 'utf-8');
+    fs.writeFileSync(resolved, content, encoding || "utf-8");
     return { success: true };
   } catch (err) {
     return { success: false, error: err.message };
@@ -2384,7 +2643,7 @@ ipcMain.handle('fs:writeFile', (event, filePath, content, encoding) => {
 /**
  * Rename a local file or directory.
  */
-ipcMain.handle('fs:rename', (event, oldPath, newPath) => {
+ipcMain.handle("fs:rename", (event, oldPath, newPath) => {
   try {
     const resolvedOld = path.resolve(oldPath);
     const resolvedNew = path.resolve(newPath);
@@ -2395,7 +2654,7 @@ ipcMain.handle('fs:rename', (event, oldPath, newPath) => {
   }
 });
 
-ipcMain.handle('fs:copyPath', (event, sourcePath, destPath) => {
+ipcMain.handle("fs:copyPath", (event, sourcePath, destPath) => {
   try {
     const resolvedSrc = path.resolve(sourcePath);
     const resolvedDst = path.resolve(destPath);
@@ -2415,31 +2674,36 @@ ipcMain.handle('fs:copyPath', (event, sourcePath, destPath) => {
 // IPC: Settings Persistence
 // ═══════════════════════════════════════════════════════════════════════
 
-ipcMain.handle('settings:get', (event, key, defaultValue) => {
+ipcMain.handle("settings:get", (event, key, defaultValue) => {
   try {
-    if (!fs.existsSync(SETTINGS_FILE)) return defaultValue !== undefined ? defaultValue : null;
-    const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
-    return data[key] !== undefined ? data[key] : (defaultValue !== undefined ? defaultValue : null);
+    if (!fs.existsSync(SETTINGS_FILE))
+      return defaultValue !== undefined ? defaultValue : null;
+    const data = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
+    return data[key] !== undefined
+      ? data[key]
+      : defaultValue !== undefined
+        ? defaultValue
+        : null;
   } catch {
     return defaultValue !== undefined ? defaultValue : null;
   }
 });
 
-ipcMain.handle('settings:set', (event, key, value) => {
+ipcMain.handle("settings:set", (event, key, value) => {
   try {
     let data = {};
     if (fs.existsSync(SETTINGS_FILE)) {
-      data = JSON.parse(fs.readFileSync(SETTINGS_FILE, 'utf-8'));
+      data = JSON.parse(fs.readFileSync(SETTINGS_FILE, "utf-8"));
     }
     if (value === null || value === undefined) {
       delete data[key];
     } else {
       data[key] = value;
     }
-    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), 'utf-8');
+    fs.writeFileSync(SETTINGS_FILE, JSON.stringify(data, null, 2), "utf-8");
     return true;
   } catch (err) {
-    console.error('[settings:set] Error:', err);
+    console.error("[settings:set] Error:", err);
     return false;
   }
 });
@@ -2447,14 +2711,14 @@ ipcMain.handle('settings:set', (event, key, value) => {
 // ═══════════════════════════════════════════════════════════════════════
 // IPC: Dialogs
 // ═══════════════════════════════════════════════════════════════════════
-ipcMain.handle('dialog:openFile', async (event, options) => {
+ipcMain.handle("dialog:openFile", async (event, options) => {
   const result = await dialog.showOpenDialog(mainWindow, options);
   return result;
 });
 
-ipcMain.handle('dialog:openFolder', async () => {
+ipcMain.handle("dialog:openFolder", async () => {
   const result = await dialog.showOpenDialog(mainWindow, {
-    properties: ['openDirectory']
+    properties: ["openDirectory"],
   });
   return result;
 });
@@ -2466,14 +2730,14 @@ ipcMain.handle('dialog:openFolder', async () => {
 /**
  * Get all saved port forwarding rules.
  */
-ipcMain.handle('tunnel:getRules', () => {
+ipcMain.handle("tunnel:getRules", () => {
   return tunnelRules;
 });
 
 /**
  * Save the full set of port forwarding rules (replaces all).
  */
-ipcMain.handle('tunnel:saveRules', (event, rules) => {
+ipcMain.handle("tunnel:saveRules", (event, rules) => {
   tunnelRules = rules || [];
   savePortForwardRules();
   return true;
@@ -2484,7 +2748,7 @@ ipcMain.handle('tunnel:saveRules', (event, rules) => {
  * @param {string} ruleId - The rule ID to start
  * @param {string} connectionId - The SSH connection ID to tunnel through
  */
-ipcMain.handle('tunnel:start', async (event, ruleId, connectionId) => {
+ipcMain.handle("tunnel:start", async (event, ruleId, connectionId) => {
   return await startTunnel(ruleId, connectionId);
 });
 
@@ -2492,23 +2756,23 @@ ipcMain.handle('tunnel:start', async (event, ruleId, connectionId) => {
  * Stop an active port forwarding tunnel.
  * @param {string} ruleId - The rule ID to stop
  */
-ipcMain.handle('tunnel:stop', (event, ruleId) => {
+ipcMain.handle("tunnel:stop", (event, ruleId) => {
   return stopTunnel(ruleId);
 });
 
 /**
  * Get the list of currently active tunnel rule IDs.
  */
-ipcMain.handle('tunnel:listActive', () => {
+ipcMain.handle("tunnel:listActive", () => {
   const active = [];
   for (const [ruleId, tunnel] of activeTunnels) {
     active.push({
       ruleId: ruleId,
       localPort: tunnel.rule.localPort,
-      remoteHost: tunnel.rule.remoteHost || 'localhost',
+      remoteHost: tunnel.rule.remoteHost || "localhost",
       remotePort: tunnel.rule.remotePort,
       connectionId: tunnel.connectionId,
-      activeConnections: tunnel.sockets.size
+      activeConnections: tunnel.sockets.size,
     });
   }
   return active;
