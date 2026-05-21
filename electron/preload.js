@@ -232,5 +232,21 @@ contextBridge.exposeInMainWorld("termulAPI", {
     removeFtpProgressListener: () => {
       ipcRenderer.removeAllListeners("ftp:progress");
     },
+    onConnectionClosed: (callback) => {
+      ipcRenderer.on("ftp:connection-closed", (event, data) =>
+        callback(data),
+      );
+    },
+    onConnectionError: (callback) => {
+      ipcRenderer.on("ftp:connection-error", (event, data) =>
+        callback(data),
+      );
+    },
+    removeConnectionClosedListener: () => {
+      ipcRenderer.removeAllListeners("ftp:connection-closed");
+    },
+    removeConnectionErrorListener: () => {
+      ipcRenderer.removeAllListeners("ftp:connection-error");
+    },
   },
 });

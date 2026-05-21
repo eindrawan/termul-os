@@ -90,6 +90,11 @@
     shadow.getElementById('log-close')?.addEventListener('click', closeLogPanel);
     shadow.getElementById('log-refresh')?.addEventListener('click', refreshLogs);
 
+    // Setup file browser panel
+    shadow.getElementById('files-close')?.addEventListener('click', closeFilesPanel);
+    shadow.getElementById('files-refresh')?.addEventListener('click', refreshFiles);
+    shadow.getElementById('files-up')?.addEventListener('click', filesGoUp);
+
     // Initial load — restore saved sudo password first, then detect
     loadSavedSudoPassword().then(function() {
       loadAllData();
@@ -544,6 +549,13 @@
               </svg>
             </button>
             ${c.state === 'running' ? `
+              <button class="docker-action-btn" data-action="files" title="Browse Files">
+                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+                </svg>
+              </button>
+            ` : ''}
+            ${c.state === 'running' ? `
               <button class="docker-action-btn" data-action="restart" title="Restart">
                 <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                   <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
@@ -613,6 +625,9 @@
         break;
       case 'shell':
         openShell(id);
+        break;
+      case 'files':
+        showFilesPanel(id);
         break;
     }
   }
@@ -1456,6 +1471,9 @@
             `}
             <button class="tui-btn tui-btn-default" data-action="logs">View Logs</button>
             <button class="tui-btn tui-btn-default" data-action="shell">Open Shell</button>
+            ${container.state === 'running' ? `
+              <button class="tui-btn tui-btn-default" data-action="files">Browse Files</button>
+            ` : ''}
             <button class="tui-btn tui-btn-danger" data-action="remove">Remove</button>
           </div>
         </div>
@@ -1536,6 +1554,297 @@
     overlay.addEventListener('click', (e) => {
       if (e.target === overlay) overlay.remove();
     });
+  }
+
+  // ─── Part 6: File Browser Panel ────────────────────────────────────────
+
+  var filesState = {
+    containerId: null,
+    containerName: null,
+    currentPath: '/',
+    entries: []
+  };
+
+  /**
+   * Text file extensions for detection (subset used for editor-open-file).
+   */
+  var TEXT_EXTENSIONS_MAP = {
+    txt:1,md:1,markdown:1,json:1,jsonc:1,yaml:1,yml:1,toml:1,xml:1,svg:1,
+    html:1,htm:1,css:1,scss:1,less:1,js:1,jsx:1,mjs:1,ts:1,tsx:1,py:1,
+    rb:1,go:1,rs:1,java:1,kt:1,c:1,h:1,cpp:1,cc:1,hpp:1,cs:1,php:1,
+    sh:1,bash:1,zsh:1,ps1:1,bat:1,cmd:1,sql:1,lua:1,r:1,dart:1,swift:1,
+    dockerfile:1,makefile:1,cmake:1,ini:1,cfg:1,conf:1,log:1,csv:1,env:1,
+    gitignore:1,editorconfig:1,properties:1
+  };
+
+  var TEXT_FILENAMES_MAP = {
+    readme:1,license:1,copying:1,authors:1,changelog:1,makefile:1,dockerfile:1,
+    containerfile:1,vagrantfile:1,gemfile:1,rakefile:1,procfile:1,jenkinsfile:1,
+    '.gitignore':1,'.editorconfig':1,'.env':1,'.npmrc':1,'.babelrc':1
+  };
+
+  function isTextFileName(name) {
+    if (!name) return false;
+    var lower = name.toLowerCase();
+    var dotIdx = name.lastIndexOf('.');
+    if (dotIdx >= 0) {
+      var ext = name.substring(dotIdx + 1).toLowerCase();
+      if (TEXT_EXTENSIONS_MAP[ext]) return true;
+    }
+    if (TEXT_FILENAMES_MAP[lower]) return true;
+    return false;
+  }
+
+  /**
+   * Run a command inside the container via docker exec.
+   * Returns stdout string or null on failure.
+   */
+  async function dockerExec(containerId, cmd) {
+    var execCmd = 'exec ' + containerId + ' sh -c ' + shellArg(cmd);
+    return await dockerCommand(execCmd);
+  }
+
+  /**
+   * Open the file browser panel for a container.
+   */
+  function showFilesPanel(id) {
+    var container = state.containers.find(function(c) { return c.id === id; });
+    if (!container) return;
+
+    filesState.containerId = id;
+    filesState.containerName = container.name;
+    filesState.currentPath = '/';
+
+    var panel = shadow.getElementById('docker-files-panel');
+    var title = shadow.getElementById('files-title');
+    if (title) title.textContent = 'Files: ' + container.name;
+    if (panel) panel.classList.add('open');
+
+    loadFiles();
+  }
+
+  function closeFilesPanel() {
+    filesState.containerId = null;
+    filesState.containerName = null;
+    filesState.entries = [];
+    var panel = shadow.getElementById('docker-files-panel');
+    if (panel) panel.classList.remove('open');
+  }
+
+  async function loadFiles() {
+    if (!filesState.containerId) return;
+
+    var listEl = shadow.getElementById('files-list');
+    var pathEl = shadow.getElementById('files-path-text');
+
+    if (listEl) listEl.innerHTML = '<div class="docker-loading"><div class="docker-spinner"></div><span>Loading files...</span></div>';
+    if (pathEl) pathEl.textContent = filesState.currentPath;
+
+    // Use ls -la and parse output
+    // Format: permissions links owner group size month day time/year name
+    var cmd = 'ls -la --time-style=+%s ' + shellArg(filesState.currentPath) + ' 2>&1';
+    var output = await dockerExec(filesState.containerId, cmd);
+
+    if (!output) {
+      if (listEl) listEl.innerHTML = '<div class="docker-empty"><p class="docker-empty-text">Failed to list directory</p></div>';
+      return;
+    }
+
+    // Check for error lines
+    var lines = output.trim().split('\n');
+    if (lines.length > 0 && lines[0].indexOf('cannot access') !== -1) {
+      if (listEl) listEl.innerHTML = '<div class="docker-empty"><p class="docker-empty-text">Cannot access directory</p></div>';
+      return;
+    }
+
+    filesState.entries = [];
+
+    for (var i = 0; i < lines.length; i++) {
+      var line = lines[i].trim();
+      if (!line || line.indexOf('total ') === 0) continue;
+
+      // Parse ls -la output
+      // drwxr-xr-x  2 root root 4096 1716000000 .
+      // -rw-r--r--  1 root root  123 1716000000 filename
+      var parts = line.split(/\s+/);
+      if (parts.length < 7) continue;
+
+      var perms = parts[0];
+      var name = parts.slice(6).join(' ');
+
+      // Skip . and ..
+      if (name === '.' || name === '..') continue;
+
+      // Skip the "total" line if it got here
+      if (perms === 'total') continue;
+
+      var isDir = perms.charAt(0) === 'd';
+      var isLink = perms.charAt(0) === 'l';
+      var size = parseInt(parts[4], 10) || 0;
+      var mtime = parseInt(parts[5], 10) || 0;
+
+      // For symlinks, extract the actual name (before " -> ")
+      if (isLink && name.indexOf(' -> ') !== -1) {
+        name = name.split(' -> ')[0];
+      }
+
+      // Build full path
+      var fullPath = filesState.currentPath;
+      if (fullPath !== '/') fullPath += '/';
+      fullPath += name;
+
+      filesState.entries.push({
+        name: name,
+        path: fullPath,
+        isDirectory: isDir,
+        isFile: !isDir && !isLink,
+        size: size,
+        modifyTime: mtime
+      });
+    }
+
+    renderFiles();
+  }
+
+  function renderFiles() {
+    var listEl = shadow.getElementById('files-list');
+    if (!listEl) return;
+
+    if (filesState.entries.length === 0) {
+      listEl.innerHTML = '<div class="docker-empty"><p class="docker-empty-text">Empty directory</p></div>';
+      return;
+    }
+
+    // Sort: directories first, then files, alphabetically
+    var sorted = filesState.entries.slice().sort(function(a, b) {
+      if (a.isDirectory && !b.isDirectory) return -1;
+      if (!a.isDirectory && b.isDirectory) return 1;
+      return (a.name || '').toLowerCase().localeCompare((b.name || '').toLowerCase());
+    });
+
+    var html = '';
+
+    // Parent directory row (if not at root)
+    if (filesState.currentPath !== '/') {
+      html += '<div class="docker-files-row docker-files-parent" data-action="parent">';
+      html += '<div class="docker-files-icon docker-files-icon-parent"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="18 15 12 9 6 15"/></svg></div>';
+      html += '<span class="docker-files-name">..</span>';
+      html += '<span class="docker-files-size"></span>';
+      html += '<span class="docker-files-date"></span>';
+      html += '</div>';
+    }
+
+    for (var i = 0; i < sorted.length; i++) {
+      var entry = sorted[i];
+      var iconClass = entry.isDirectory ? 'docker-files-icon-folder' : 'docker-files-icon-file';
+      var iconSvg = entry.isDirectory
+        ? '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>'
+        : '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>';
+      var sizeStr = entry.isFile ? formatFileSize(entry.size) : '';
+      var dateStr = entry.modifyTime ? formatDate(entry.modifyTime) : '';
+
+      html += '<div class="docker-files-row" data-path="' + escapeHtml(entry.path) + '" data-isdir="' + (entry.isDirectory ? '1' : '0') + '" data-isfile="' + (entry.isFile ? '1' : '0') + '" data-name="' + escapeHtml(entry.name) + '">';
+      html += '<div class="docker-files-icon ' + iconClass + '">' + iconSvg + '</div>';
+      html += '<span class="docker-files-name">' + escapeHtml(entry.name) + '</span>';
+      html += '<span class="docker-files-size">' + escapeHtml(sizeStr) + '</span>';
+      html += '<span class="docker-files-date">' + escapeHtml(dateStr) + '</span>';
+      html += '</div>';
+    }
+
+    listEl.innerHTML = html;
+
+    // Bind click handlers
+    listEl.querySelectorAll('.docker-files-row').forEach(function(row) {
+      // Parent row (..) stays single-click for quick navigation
+      if (row.getAttribute('data-action') === 'parent') {
+        row.addEventListener('click', function() {
+          filesGoUp();
+        });
+        return;
+      }
+
+      // Files and folders require double-click to open
+      row.addEventListener('dblclick', function() {
+        var path = row.getAttribute('data-path');
+        var isDir = row.getAttribute('data-isdir') === '1';
+        var isFile = row.getAttribute('data-isfile') === '1';
+        var name = row.getAttribute('data-name');
+
+        if (isDir) {
+          filesState.currentPath = path;
+          loadFiles();
+        } else if (isFile) {
+          openFileInEditor(path, name);
+        }
+      });
+    });
+  }
+
+  function refreshFiles() {
+    if (filesState.containerId) loadFiles();
+  }
+
+  function filesGoUp() {
+    if (!filesState.containerId) return;
+    if (filesState.currentPath === '/') return;
+    // Go to parent: strip trailing slash, then take dirname
+    var path = filesState.currentPath.replace(/\/$/, '');
+    var lastSlash = path.lastIndexOf('/');
+    if (lastSlash <= 0) {
+      filesState.currentPath = '/';
+    } else {
+      filesState.currentPath = path.substring(0, lastSlash);
+    }
+    loadFiles();
+  }
+
+  /**
+   * Open a file from inside the container in the file-editor plugin.
+   */
+  function openFileInEditor(filePath, fileName) {
+    if (!filesState.containerId) return;
+
+    // Dispatch a dedicated event for the file-editor plugin
+    document.dispatchEvent(new CustomEvent('termul:editor-open-docker-file', {
+      detail: {
+        path: filePath,
+        source: 'docker',
+        containerId: filesState.containerId,
+        containerName: filesState.containerName,
+        name: fileName,
+        useSudo: state.useSudo || false,
+        sudoPassword: state.sudoPassword || ''
+      }
+    }));
+
+    getToast().show('Opening ' + fileName + ' in editor...', 'info');
+  }
+
+  function formatFileSize(bytes) {
+    if (!bytes || bytes === 0) return '0 B';
+    var units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    var i = 0;
+    var size = bytes;
+    while (size >= 1024 && i < units.length - 1) {
+      size /= 1024;
+      i++;
+    }
+    return size.toFixed(i === 0 ? 0 : 1) + ' ' + units[i];
+  }
+
+  function formatDate(timestamp) {
+    if (!timestamp) return '';
+    try {
+      var d = new Date(timestamp * 1000);
+      var year = d.getFullYear();
+      var month = String(d.getMonth() + 1).padStart(2, '0');
+      var day = String(d.getDate()).padStart(2, '0');
+      var hour = String(d.getHours()).padStart(2, '0');
+      var min = String(d.getMinutes()).padStart(2, '0');
+      return year + '-' + month + '-' + day + ' ' + hour + ':' + min;
+    } catch (e) {
+      return '';
+    }
   }
 
   // ─── End of Docker Plugin ───────────────────────────────────────────────

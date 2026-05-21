@@ -14,23 +14,17 @@
         <span>Download</span>
       </button>
       <div class="ft-toolbar-sep"></div>
-      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-add-file-btn" title="Create new file in active pane">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
-        <span>New File</span>
+      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-bookmark-btn" title="Bookmarks">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>
+        <span>Bookmarks</span>
       </button>
-      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-add-folder-btn" title="Create new folder in active pane">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
-        <span>New Folder</span>
-      </button>
-      <button class="tui-btn tui-btn-ghost ft-btn ft-btn-danger" id="ft-delete-btn" title="Delete selected items" disabled>
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
-        <span>Delete</span>
-      </button>
-      <div class="ft-toolbar-sep"></div>
-      <button class="tui-btn tui-btn-ghost ft-btn" id="ft-refresh-all" title="Refresh Both">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
-        <span>Refresh</span>
-      </button>
+    </div>
+  </div>
+
+  <!-- Bookmark dropdown -->
+  <div class="ft-bookmark-dropdown" id="ft-bookmark-dropdown">
+    <div class="ft-bm-content" id="ft-bm-content">
+      <div class="ft-bm-empty">No bookmarks yet</div>
     </div>
   </div>
 
@@ -39,9 +33,25 @@
     <!-- Local pane (left) -->
     <div class="ft-pane" data-pane="local" id="ft-local-pane">
       <div class="ft-pane-header">
-        <div class="ft-pane-label">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
-          <span>Local</span>
+        <div class="ft-pane-header-row">
+          <div class="ft-pane-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>
+            <span>Local</span>
+          </div>
+          <div class="ft-pane-actions">
+            <button class="tui-btn-icon ft-pane-action" id="ft-local-add-file" title="New File">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            </button>
+            <button class="tui-btn-icon ft-pane-action" id="ft-local-add-folder" title="New Folder">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </button>
+            <button class="tui-btn-icon ft-pane-action ft-pane-action-danger" id="ft-local-delete" title="Delete" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+            <button class="tui-btn-icon ft-pane-action" id="ft-local-refresh" title="Refresh">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+          </div>
         </div>
         <div class="ft-path-bar">
           <div class="ft-path-breadcrumb" id="ft-local-breadcrumb"></div>
@@ -79,9 +89,25 @@
     <!-- Remote pane (right) -->
     <div class="ft-pane" data-pane="remote" id="ft-remote-pane">
       <div class="ft-pane-header">
-        <div class="ft-pane-label">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
-          <span>Remote</span>
+        <div class="ft-pane-header-row">
+          <div class="ft-pane-label">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="2" width="20" height="8" rx="2"/><rect x="2" y="14" width="20" height="8" rx="2"/><circle cx="6" cy="6" r="1"/><circle cx="6" cy="18" r="1"/></svg>
+            <span>Remote</span>
+          </div>
+          <div class="ft-pane-actions">
+            <button class="tui-btn-icon ft-pane-action" id="ft-remote-add-file" title="New File">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="12" y1="18" x2="12" y2="12"/><line x1="9" y1="15" x2="15" y2="15"/></svg>
+            </button>
+            <button class="tui-btn-icon ft-pane-action" id="ft-remote-add-folder" title="New Folder">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/></svg>
+            </button>
+            <button class="tui-btn-icon ft-pane-action ft-pane-action-danger" id="ft-remote-delete" title="Delete" disabled>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+            </button>
+            <button class="tui-btn-icon ft-pane-action" id="ft-remote-refresh" title="Refresh">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M23 4v6h-6"/><path d="M1 20v-6h6"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+            </button>
+          </div>
         </div>
         <div class="ft-path-bar">
           <div class="ft-path-breadcrumb" id="ft-remote-breadcrumb"></div>

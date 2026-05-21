@@ -196,6 +196,41 @@
     </div>
   </div>
 
+  <!-- File Browser Panel (slide-in) -->
+  <div class="docker-files-panel" id="docker-files-panel">
+    <div class="docker-files-header">
+      <div class="docker-files-title">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+        </svg>
+        <span id="files-title">Files</span>
+      </div>
+      <div class="docker-files-actions">
+        <button class="tui-btn-icon" id="files-up" title="Go up">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="18 15 12 9 6 15"/>
+          </svg>
+        </button>
+        <button class="tui-btn-icon" id="files-refresh" title="Refresh">
+          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M23 4v6h-6"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>
+          </svg>
+        </button>
+        <button class="tui-btn-icon" id="files-close" title="Close">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>
+          </svg>
+        </button>
+      </div>
+    </div>
+    <div class="docker-files-path" id="files-path-bar">
+      <span class="docker-files-path-text" id="files-path-text">/</span>
+    </div>
+    <div class="docker-files-list tui-scrollbar" id="files-list">
+      <div class="docker-loading"><div class="docker-spinner"></div><span>Loading files...</span></div>
+    </div>
+  </div>
+
   <!-- Log Panel (slide-in) -->
   <div class="docker-log-panel" id="docker-log-panel">
     <div class="docker-log-header">

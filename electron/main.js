@@ -650,6 +650,8 @@ ipcMain.handle("ssh:connect", (event, profile) => {
       host: profile.host,
       port: profile.port || 22,
       username: profile.username,
+      keepaliveInterval: 15000,
+      keepaliveCountMax: 3,
     };
 
     if (profile.authType === "key" && profile.privateKey) {
@@ -2160,7 +2162,52 @@ ipcMain.handle("ftp:connect", async (event, profile) => {
 
   try {
     await client.access(ftpConfig);
-    ftpConnections.set(connId, { client, profile });
+
+    let notifiedRenderer = false;
+
+    const notifyConnectionLost = (reason) => {
+      if (notifiedRenderer) return;
+      notifiedRenderer = true;
+
+      const entry = ftpConnections.get(connId);
+      if (entry && entry.keepaliveInterval) {
+        clearInterval(entry.keepaliveInterval);
+      }
+      ftpConnections.delete(connId);
+
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        mainWindow.webContents.send("ftp:connection-closed", {
+          connectionId: connId,
+          error: reason,
+        });
+      }
+    };
+
+    client.ftp.socket.on("close", () => {
+      notifyConnectionLost("Connection closed by server");
+    });
+
+    client.ftp.socket.on("error", (err) => {
+      notifyConnectionLost(err.message || "FTP connection error");
+    });
+
+    const keepaliveInterval = setInterval(async () => {
+      const entry = ftpConnections.get(connId);
+      if (!entry || entry.client.closed) {
+        clearInterval(keepaliveInterval);
+        return;
+      }
+      try {
+        await entry.client.send("NOOP");
+      } catch (e) {
+        clearInterval(keepaliveInterval);
+        notifyConnectionLost(
+          e.message || "FTP keepalive failed"
+        );
+      }
+    }, 30000);
+
+    ftpConnections.set(connId, { client, profile, keepaliveInterval });
     return { success: true, connectionId: connId };
   } catch (err) {
     return { success: false, error: err.message || "FTP connection failed" };
@@ -2170,6 +2217,9 @@ ipcMain.handle("ftp:connect", async (event, profile) => {
 ipcMain.handle("ftp:disconnect", (event, connectionId) => {
   const entry = ftpConnections.get(connectionId);
   if (entry) {
+    if (entry.keepaliveInterval) {
+      clearInterval(entry.keepaliveInterval);
+    }
     entry.client.close();
     ftpConnections.delete(connectionId);
     return true;

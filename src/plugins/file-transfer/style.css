@@ -101,6 +101,37 @@
   flex-shrink: 0;
 }
 
+.ft-pane-header-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.ft-pane-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.ft-pane-action {
+  width: 26px;
+  height: 26px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-pane-action:hover:not(:disabled) {
+  color: var(--tui-text-primary);
+}
+
+.ft-pane-action-danger {
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-pane-action-danger:hover:not(:disabled) {
+  color: var(--tui-error-text, #ff6b6b);
+  background: rgba(232, 17, 35, 0.1);
+}
+
 .ft-pane-label {
   display: flex;
   align-items: center;
@@ -212,6 +243,176 @@
   width: 26px;
   height: 26px;
   flex-shrink: 0;
+}
+
+/* ─── Bookmark Dropdown ────────────────────────────────────────────── */
+.ft-bookmark-dropdown {
+  display: none;
+  position: absolute;
+  z-index: 2100;
+  right: var(--tui-space-md, 12px);
+  top: 42px;
+  min-width: 340px;
+  max-width: 480px;
+  max-height: 360px;
+  background: rgba(44, 44, 44, 0.92);
+  backdrop-filter: blur(20px) saturate(1.2);
+  -webkit-backdrop-filter: blur(20px) saturate(1.2);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 8px;
+  box-shadow:
+    0 2px 4px rgba(0, 0, 0, 0.12),
+    0 8px 28px rgba(0, 0, 0, 0.36),
+    inset 0 0 0 1px rgba(255, 255, 255, 0.04);
+  animation: ft-ctx-in 120ms cubic-bezier(0.16, 1, 0.3, 1);
+  overflow: hidden;
+}
+
+.ft-bookmark-dropdown.ft-bm-open {
+  display: block;
+}
+
+.ft-bm-content {
+  overflow-y: auto;
+  max-height: 360px;
+  padding: 4px;
+}
+
+.ft-bm-empty {
+  text-align: center;
+  padding: 16px 12px;
+  font-size: 12px;
+  color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+}
+
+.ft-bm-item {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 80ms ease;
+  user-select: none;
+}
+
+.ft-bm-item:hover {
+  background: rgba(255, 255, 255, 0.06);
+}
+
+.ft-bm-item-icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: #FFB900;
+  margin-top: 2px;
+}
+
+.ft-bm-item-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.ft-bm-item-paths {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.ft-bm-item-path {
+  font-size: 11px;
+  font-family: var(--tui-font-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.ft-bm-item-path-label {
+  font-size: 9px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.3px;
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+  flex-shrink: 0;
+  min-width: 36px;
+}
+
+.ft-bm-item-path-text {
+  color: var(--tui-text-secondary, rgba(255,255,255,0.6));
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ft-bm-item:hover .ft-bm-item-path-text {
+  color: var(--tui-text-primary);
+}
+
+.ft-bm-item-remove {
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: none;
+  border: none;
+  color: var(--tui-text-disabled, rgba(255,255,255,0.25));
+  cursor: pointer;
+  border-radius: 3px;
+  opacity: 0;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease;
+  margin-top: 0;
+}
+
+.ft-bm-item:hover .ft-bm-item-remove {
+  opacity: 1;
+}
+
+.ft-bm-item-remove:hover {
+  color: var(--tui-error-text, #ff6b6b);
+  background: rgba(232, 17, 35, 0.1);
+}
+
+.ft-bm-item-remove svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* ─── Bookmark "Add" Action Item ───────────────────────────────────── */
+.ft-bm-add-item {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  margin-bottom: 4px;
+  padding-bottom: 10px;
+}
+
+.ft-bm-add-item .ft-bm-item-icon {
+  color: var(--tui-accent-secondary, #60CDFF);
+}
+
+.ft-bm-add-item .ft-bm-item-path-text {
+  color: var(--tui-text-tertiary, rgba(255,255,255,0.45));
+}
+
+.ft-bm-add-item:hover .ft-bm-item-path-text {
+  color: var(--tui-text-primary);
+}
+
+/* ─── Toolbar Bookmark Active State ────────────────────────────────── */
+.ft-btn.ft-bookmarked-active {
+  color: #FFB900;
+}
+
+.ft-btn.ft-bookmarked-active svg {
+  fill: #FFB900;
 }
 
 /* ─── File List ────────────────────────────────────────────────────── */

@@ -657,6 +657,152 @@
   background: rgba(255, 255, 255, 0.2);
 }
 
+/* ─── File Browser Panel ──────────────────────────────────── */
+.docker-files-panel {
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 500px;
+  background: var(--tui-bg-surface, #0f0f0f);
+  border-left: 1px solid var(--tui-border-medium, rgba(255, 255, 255, 0.1));
+  z-index: 12;
+  display: none;
+  flex-direction: column;
+  box-shadow: var(--tui-shadow-lg, -4px 0 24px rgba(0, 0, 0, 0.35));
+  animation: slideInRight 200ms ease;
+}
+
+.docker-files-panel.open {
+  display: flex;
+}
+
+.docker-files-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 16px;
+  background: var(--tui-bg-elevated, rgba(28, 28, 28, 0.92));
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+}
+
+.docker-files-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.docker-files-title span {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docker-files-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.docker-files-path {
+  padding: 6px 16px;
+  background: rgba(255, 255, 255, 0.02);
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.06));
+  flex-shrink: 0;
+}
+
+.docker-files-path-text {
+  font-family: var(--tui-font-mono, monospace);
+  font-size: 11px;
+  color: var(--tui-text-secondary, rgba(255, 255, 255, 0.6));
+  word-break: break-all;
+}
+
+.docker-files-list {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+
+.docker-files-row {
+  display: flex;
+  align-items: center;
+  padding: 6px 16px;
+  gap: 10px;
+  cursor: pointer;
+  border-bottom: 1px solid var(--tui-border-subtle, rgba(255, 255, 255, 0.03));
+  transition: background 80ms ease;
+  min-height: 32px;
+}
+
+.docker-files-row:hover {
+  background: var(--tui-bg-hover, rgba(255, 255, 255, 0.07));
+}
+
+.docker-files-row:active {
+  background: var(--tui-bg-active, rgba(255, 255, 255, 0.1));
+}
+
+.docker-files-parent {
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+}
+
+.docker-files-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.docker-files-icon svg {
+  width: 14px;
+  height: 14px;
+}
+
+.docker-files-icon-folder {
+  color: #FFB900;
+}
+
+.docker-files-icon-file {
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+}
+
+.docker-files-icon-parent {
+  color: var(--tui-text-disabled, rgba(255, 255, 255, 0.25));
+}
+
+.docker-files-name {
+  flex: 1;
+  min-width: 0;
+  font-size: 12px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.docker-files-size {
+  width: 70px;
+  text-align: right;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-family: var(--tui-font-mono, monospace);
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+}
+
+.docker-files-date {
+  width: 110px;
+  text-align: right;
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--tui-text-tertiary, rgba(255, 255, 255, 0.45));
+}
+
 /* ─── Responsive ───────────────────────────────────────── */
 @media (max-width: 700px) {
   .docker-detail,

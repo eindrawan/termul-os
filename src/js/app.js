@@ -82,6 +82,15 @@ class TermulOS {
       this.handleConnectionLost(data.connectionId, data.error || 'Connection error');
     });
 
+    // FTP connection lifecycle — detect drops and errors
+    window.termulAPI.ftp.onConnectionClosed((data) => {
+      this.handleConnectionLost(data.connectionId, data.error || 'FTP connection closed by server');
+    });
+
+    window.termulAPI.ftp.onConnectionError((data) => {
+      this.handleConnectionLost(data.connectionId, data.error || 'FTP connection error');
+    });
+
     // Tunnel: open port forwarder plugin from system tray
     window.termulAPI.tunnel.onOpenPlugin(() => {
       const plugin = window.PluginLoader.plugins.get('port-forwarder');
@@ -1436,7 +1445,7 @@ class TermulOS {
    * ═════════════════════════════════════════════════════════════════════ */
 
   /**
-   * Called when an SSH connection is lost (closed by server or error).
+   * Called when an SSH or FTP connection is lost (closed by server or error).
    * @param {string} connectionId
    * @param {string} reason - Human-readable reason
    */
@@ -1463,20 +1472,101 @@ class TermulOS {
     document.dispatchEvent(new CustomEvent('termul:connection-status', {
       detail: {
         status: 'disconnected',
-        connectionId: oldConnectionId, // Send the old connectionId for reference
+        connectionId: oldConnectionId,
         profile: tab.profile,
         reason: reason
       }
     }));
 
-    // If this is the active tab, show the disconnect dialog
-    if (tab.id === this.activeTabId) {
-      this.showDisconnectDialog(tab, reason);
-    }
-
     // Update UI
     this.renderTabs();
     this.updateTaskbar();
+
+    // Start auto-reconnect with exponential backoff
+    this._autoReconnect(tab, reason);
+  }
+
+  /**
+   * Attempt to auto-reconnect a disconnected tab with exponential backoff.
+   * Falls back to the manual disconnect dialog after max attempts.
+   * @param {Object} tab - The tab to reconnect
+   * @param {string} reason - Original disconnect reason
+   * @param {number} [attempt=0] - Current attempt number (0-based)
+   */
+  async _autoReconnect(tab, reason, attempt) {
+    if (typeof attempt === 'undefined') attempt = 0;
+
+    var maxAttempts = 5;
+    var baseDelay = 2000;
+
+    // Check if tab still exists and still needs reconnection
+    if (!this.tabs.includes(tab)) return;
+    if (tab.status !== 'disconnected') return;
+
+    if (attempt >= maxAttempts) {
+      if (tab.id === this.activeTabId) {
+        this.showDisconnectDialog(tab, reason + ' (auto-reconnect failed after ' + maxAttempts + ' attempts)');
+      }
+      return;
+    }
+
+    var delay = baseDelay * Math.pow(2, attempt);
+
+    // Update tab status to show reconnecting
+    tab.status = 'reconnecting';
+    this.renderTabs();
+    this.updateTaskbar();
+
+    // Notify plugins: reconnecting
+    document.dispatchEvent(new CustomEvent('termul:connection-status', {
+      detail: {
+        status: 'reconnecting',
+        connectionId: tab.connectionId,
+        profile: tab.profile,
+        attempt: attempt + 1,
+        maxAttempts: maxAttempts,
+        nextRetryIn: delay
+      }
+    }));
+
+    await new Promise(function(resolve) { setTimeout(resolve, delay); });
+
+    // Re-check after delay — tab may have been closed or manually reconnected
+    if (!this.tabs.includes(tab)) return;
+    if (tab.status !== 'reconnecting') return;
+
+    try {
+      var result = await window.ConnectionManager.connect(tab.profile);
+      if (result.success) {
+        var oldConnectionId = tab.connectionId;
+        tab.connectionId = result.connectionId;
+        tab.status = 'connected';
+
+        if (tab.id === this.activeTabId) {
+          this.connectionId = tab.connectionId;
+          this.currentProfile = tab.profile;
+        }
+
+        document.dispatchEvent(new CustomEvent('termul:connection-status', {
+          detail: {
+            status: 'connected',
+            connectionId: tab.connectionId,
+            previousConnectionId: oldConnectionId,
+            profile: tab.profile
+          }
+        }));
+
+        this.renderTabs();
+        this.updateTaskbar();
+        return;
+      }
+    } catch (err) {
+      // Will retry on next iteration
+    }
+
+    // Reset status to disconnected before next attempt
+    tab.status = 'disconnected';
+    this._autoReconnect(tab, reason, attempt + 1);
   }
 
   /**

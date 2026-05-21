@@ -218,6 +218,15 @@
     term.onResize(function () {
       resizeShell();
     });
+
+    // Auto-copy selected text on mouseup (copy-on-select behaviour)
+    termContainer.addEventListener("mouseup", function () {
+      setTimeout(function () {
+        if (term && term.hasSelection()) {
+          autoCopySelection();
+        }
+      }, 50);
+    });
   }
 
   function destroyTerminal() {
@@ -404,15 +413,9 @@
     e.preventDefault();
     e.stopPropagation();
 
-    // If there is selected text, copy it immediately on right-click
-    var hasSelection = term && term.hasSelection();
-    if (hasSelection) {
-      copySelection();
-      return;
-    }
-
     closeContextMenu();
 
+    var hasSelection = term && term.hasSelection();
     var canPaste = isConnected && shellStreamId;
 
     // Build context menu
@@ -543,6 +546,29 @@
     if (contextMenuKeyHandler) {
       document.removeEventListener("keydown", contextMenuKeyHandler, true);
       contextMenuKeyHandler = null;
+    }
+  }
+
+  async function autoCopySelection() {
+    if (!term || !term.hasSelection()) return;
+    try {
+      var text = term.getSelection();
+      await navigator.clipboard.writeText(text);
+    } catch (err) {
+      console.warn("[Terminal] Auto-copy failed:", err);
+      try {
+        var textArea = document.createElement("textarea");
+        textArea.value = term.getSelection();
+        textArea.style.position = "fixed";
+        textArea.style.left = "-9999px";
+        textArea.style.top = "-9999px";
+        document.body.appendChild(textArea);
+        textArea.select();
+        document.execCommand("copy");
+        document.body.removeChild(textArea);
+      } catch (fallbackErr) {
+        console.warn("[Terminal] Auto-copy fallback failed:", fallbackErr);
+      }
     }
   }
 

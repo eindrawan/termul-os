@@ -47,6 +47,10 @@
   var localSorted = [];
   var remoteSorted = [];
 
+  // ─── Bookmark State ───────────────────────────────────────────────────
+  var bookmarks = []; // array of { local: string, remote: string }
+  var bookmarkDropdownVisible = false;
+
   // ─── SVG Icons ──────────────────────────────────────────────────────
   var ICONS = {
     folder:
@@ -58,6 +62,12 @@
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>',
     download:
       '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 16 12 21 17 16"/><line x1="12" y1="21" x2="12" y2="9"/></svg>',
+    bookmark:
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+    bookmarkFilled:
+      '<svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="2"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+    remove:
+      '<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>',
   };
 
   // ─── Protocol Detection ──────────────────────────────────────────────
@@ -147,6 +157,275 @@
       console.warn("[FileTransfer] Failed to load remote path:", e);
       return null;
     }
+  }
+
+  // ─── Bookmark Persistence (Profile-Specific Settings) ──────────────────
+
+  /**
+   * Get profile-specific settings key for bookmarks.
+   */
+  function getBookmarksKey() {
+    var profile = api.profile;
+    if (profile && profile.id) {
+      return "fileTransfer:bookmarks:" + profile.id;
+    }
+    return "fileTransfer:bookmarks";
+  }
+
+  /**
+   * Load bookmarks from settings.
+   */
+  async function loadBookmarks() {
+    try {
+      var saved = await window.termulAPI.settings.get(getBookmarksKey(), null);
+      if (saved) {
+        var parsed = JSON.parse(saved);
+        if (Array.isArray(parsed)) {
+          bookmarks = parsed;
+        }
+      }
+    } catch (e) {
+      console.warn("[FileTransfer] Failed to load bookmarks:", e);
+      bookmarks = [];
+    }
+  }
+
+  /**
+   * Save bookmarks to settings.
+   */
+  async function saveBookmarks() {
+    try {
+      await window.termulAPI.settings.set(
+        getBookmarksKey(),
+        JSON.stringify(bookmarks),
+      );
+    } catch (e) {
+      console.warn("[FileTransfer] Failed to save bookmarks:", e);
+    }
+  }
+
+  /**
+   * Check if the current local + remote path combination is bookmarked.
+   */
+  function isCurrentBookmarked() {
+    for (var i = 0; i < bookmarks.length; i++) {
+      if (bookmarks[i].local === localPath && bookmarks[i].remote === remotePath) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Add a bookmark for the current local + remote path pair.
+   */
+  async function addCurrentBookmark() {
+    if (!localPath && !remotePath) return;
+    // Prevent duplicates
+    if (isCurrentBookmarked()) {
+      var toast = api.ui.toast();
+      toast.show("Already bookmarked", "info");
+      return;
+    }
+    bookmarks.push({ local: localPath, remote: remotePath });
+    await saveBookmarks();
+    updateBookmarkBtnState();
+    var toast = api.ui.toast();
+    toast.show("Bookmark added", "success");
+  }
+
+  /**
+   * Remove a bookmark by index.
+   */
+  async function removeBookmark(index) {
+    if (index < 0 || index >= bookmarks.length) return;
+    bookmarks.splice(index, 1);
+    await saveBookmarks();
+    updateBookmarkBtnState();
+    renderBookmarksDropdown();
+  }
+
+  /**
+   * Toggle bookmark for the current local + remote path pair.
+   */
+  async function toggleCurrentBookmark() {
+    if (isCurrentBookmarked()) {
+      // Find and remove
+      for (var i = 0; i < bookmarks.length; i++) {
+        if (bookmarks[i].local === localPath && bookmarks[i].remote === remotePath) {
+          await removeBookmark(i);
+          var toast = api.ui.toast();
+          toast.show("Bookmark removed", "info");
+          return;
+        }
+      }
+    } else {
+      await addCurrentBookmark();
+    }
+  }
+
+  /**
+   * Update toolbar bookmark button visual state (filled/unfilled icon).
+   */
+  function updateBookmarkBtnState() {
+    if (!els.bookmarkBtn) return;
+    if (isCurrentBookmarked()) {
+      els.bookmarkBtn.classList.add("ft-bookmarked-active");
+    } else {
+      els.bookmarkBtn.classList.remove("ft-bookmarked-active");
+    }
+  }
+
+  /**
+   * Render the bookmarks dropdown content.
+   */
+  function renderBookmarksDropdown() {
+    if (!els.bmContent) return;
+
+    var html = "";
+
+    // "Bookmark current paths" action at the top
+    if (!isCurrentBookmarked() && (localPath || remotePath)) {
+      html +=
+        '<div class="ft-bm-item ft-bm-add-item" id="ft-bm-add">' +
+        '<div class="ft-bm-item-icon">' +
+        ICONS.bookmark +
+        "</div>" +
+        '<div class="ft-bm-item-paths">' +
+        '<div class="ft-bm-item-path">' +
+        '<span class="ft-bm-item-path-label">Local</span>' +
+        '<span class="ft-bm-item-path-text">' +
+        escapeHtml(localPath || "(none)") +
+        "</span></div>" +
+        '<div class="ft-bm-item-path">' +
+        '<span class="ft-bm-item-path-label">Remote</span>' +
+        '<span class="ft-bm-item-path-text">' +
+        escapeHtml(remotePath || "(none)") +
+        "</span></div>" +
+        "</div>" +
+        "</div>";
+    }
+
+    if (bookmarks.length === 0) {
+      if (!html) {
+        html =
+          '<div class="ft-bm-empty">No bookmarks yet.<br>Navigate to directories and click Bookmarks to save them.</div>';
+      } else {
+        html +=
+          '<div class="ft-bm-empty">No saved bookmarks yet</div>';
+      }
+    } else {
+      for (var i = 0; i < bookmarks.length; i++) {
+        var bm = bookmarks[i];
+        html += renderBookmarkItem(bm, i);
+      }
+    }
+
+    els.bmContent.innerHTML = html;
+
+    // Bind "add bookmark" action
+    var addBtn = els.bmContent.querySelector("#ft-bm-add");
+    if (addBtn) {
+      addEventListener(addBtn, "click", function () {
+        toggleCurrentBookmark();
+        renderBookmarksDropdown();
+      });
+    }
+
+    // Bind click events on saved bookmark items
+    var items = els.bmContent.querySelectorAll(".ft-bm-item[data-index]");
+    for (var k = 0; k < items.length; k++) {
+      addEventListener(items[k], "click", handleBookmarkItemClick);
+    }
+    // Bind remove buttons
+    var removeBtns = els.bmContent.querySelectorAll(".ft-bm-item-remove");
+    for (var r = 0; r < removeBtns.length; r++) {
+      addEventListener(removeBtns[r], "click", handleBookmarkRemoveClick);
+    }
+  }
+
+  function renderBookmarkItem(bm, index) {
+    var localDisplay = bm.local || "(none)";
+    var remoteDisplay = bm.remote || "(none)";
+    return (
+      '<div class="ft-bm-item" data-index="' +
+      index +
+      '">' +
+      '<div class="ft-bm-item-icon">' +
+      ICONS.bookmarkFilled +
+      "</div>" +
+      '<div class="ft-bm-item-paths">' +
+      '<div class="ft-bm-item-path" title="' +
+      escapeAttr(localDisplay) +
+      '">' +
+      '<span class="ft-bm-item-path-label">Local</span>' +
+      '<span class="ft-bm-item-path-text">' +
+      escapeHtml(localDisplay) +
+      "</span></div>" +
+      '<div class="ft-bm-item-path" title="' +
+      escapeAttr(remoteDisplay) +
+      '">' +
+      '<span class="ft-bm-item-path-label">Remote</span>' +
+      '<span class="ft-bm-item-path-text">' +
+      escapeHtml(remoteDisplay) +
+      "</span></div>" +
+      "</div>" +
+      '<button class="ft-bm-item-remove" data-index="' +
+      index +
+      '" title="Remove bookmark">' +
+      ICONS.remove +
+      "</button>" +
+      "</div>"
+    );
+  }
+
+  function handleBookmarkItemClick(e) {
+    // Don't navigate if clicking the remove button
+    if (e.target.closest(".ft-bm-item-remove")) return;
+
+    var item = e.currentTarget;
+    var index = parseInt(item.getAttribute("data-index"), 10);
+    if (isNaN(index) || index < 0 || index >= bookmarks.length) return;
+
+    var bm = bookmarks[index];
+    hideBookmarkDropdown();
+
+    if (bm.local) {
+      navigateLocal(bm.local);
+    }
+    if (bm.remote) {
+      navigateRemote(bm.remote);
+    }
+  }
+
+  function handleBookmarkRemoveClick(e) {
+    e.stopPropagation();
+    var btn = e.currentTarget;
+    var index = parseInt(btn.getAttribute("data-index"), 10);
+    if (!isNaN(index)) {
+      removeBookmark(index);
+    }
+  }
+
+  function toggleBookmarkDropdown() {
+    if (bookmarkDropdownVisible) {
+      hideBookmarkDropdown();
+    } else {
+      showBookmarkDropdown();
+    }
+  }
+
+  function showBookmarkDropdown() {
+    if (!els.bmDropdown) return;
+    renderBookmarksDropdown();
+    els.bmDropdown.classList.add("ft-bm-open");
+    bookmarkDropdownVisible = true;
+  }
+
+  function hideBookmarkDropdown() {
+    if (!els.bmDropdown) return;
+    els.bmDropdown.classList.remove("ft-bm-open");
+    bookmarkDropdownVisible = false;
   }
 
   // ─── DOM References (resolved in onMount) ───────────────────────────
@@ -439,15 +718,25 @@
     els.remoteUp = shadow.getElementById("ft-remote-up");
     els.localHome = shadow.getElementById("ft-local-home");
     els.remoteHome = shadow.getElementById("ft-remote-home");
-    els.refreshAll = shadow.getElementById("ft-refresh-all");
     els.uploadBtn = shadow.getElementById("ft-upload-btn");
     els.downloadBtn = shadow.getElementById("ft-download-btn");
-    els.addFileBtn = shadow.getElementById("ft-add-file-btn");
-    els.addFolderBtn = shadow.getElementById("ft-add-folder-btn");
-    els.deleteBtn = shadow.getElementById("ft-delete-btn");
+    // Per-pane action buttons
+    els.localAddFile = shadow.getElementById("ft-local-add-file");
+    els.localAddFolder = shadow.getElementById("ft-local-add-folder");
+    els.localDelete = shadow.getElementById("ft-local-delete");
+    els.localRefresh = shadow.getElementById("ft-local-refresh");
+    els.remoteAddFile = shadow.getElementById("ft-remote-add-file");
+    els.remoteAddFolder = shadow.getElementById("ft-remote-add-folder");
+    els.remoteDelete = shadow.getElementById("ft-remote-delete");
+    els.remoteRefresh = shadow.getElementById("ft-remote-refresh");
     els.queueToggle = shadow.getElementById("ft-queue-toggle");
     els.queueList = shadow.getElementById("ft-queue-list");
     els.queueCount = shadow.getElementById("ft-queue-count");
+
+    // Bookmark elements
+    els.bookmarkBtn = shadow.getElementById("ft-bookmark-btn");
+    els.bmDropdown = shadow.getElementById("ft-bookmark-dropdown");
+    els.bmContent = shadow.getElementById("ft-bm-content");
 
     // Modal events — no longer needed (using api.ui.modal)
 
@@ -475,13 +764,42 @@
     addEventListener(els.remoteUp, "click", goUpRemote);
     addEventListener(els.localHome, "click", goHomeLocal);
     addEventListener(els.remoteHome, "click", goHomeRemote);
-    addEventListener(els.refreshAll, "click", refreshBoth);
     addEventListener(els.uploadBtn, "click", uploadSelected);
     addEventListener(els.downloadBtn, "click", downloadSelected);
-    addEventListener(els.addFileBtn, "click", addNewFile);
-    addEventListener(els.addFolderBtn, "click", addNewFolder);
-    addEventListener(els.deleteBtn, "click", deleteSelected);
+    // Per-pane action buttons
+    addEventListener(els.localAddFile, "click", function () {
+      addNewFile("local");
+    });
+    addEventListener(els.localAddFolder, "click", function () {
+      addNewFolder("local");
+    });
+    addEventListener(els.localDelete, "click", function () {
+      deleteSelected("local");
+    });
+    addEventListener(els.localRefresh, "click", function () {
+      loadLocalDir(localPath);
+    });
+    addEventListener(els.remoteAddFile, "click", function () {
+      addNewFile("remote");
+    });
+    addEventListener(els.remoteAddFolder, "click", function () {
+      addNewFolder("remote");
+    });
+    addEventListener(els.remoteDelete, "click", function () {
+      deleteSelected("remote");
+    });
+    addEventListener(els.remoteRefresh, "click", function () {
+      if (api.connectionId && remotePath) {
+        loadRemoteDir(remotePath);
+      }
+    });
     addEventListener(els.queueToggle, "click", toggleQueue);
+
+    // Bookmark buttons
+    addEventListener(els.bookmarkBtn, "click", function (e) {
+      e.stopPropagation();
+      toggleBookmarkDropdown();
+    });
 
     // Enter / Escape key on path inputs
     addEventListener(els.localPath, "keydown", function (e) {
@@ -617,6 +935,9 @@
       "click",
       function (e) {
         if (ctxVisible && !els.ctx.contains(e.target)) hideCtx();
+        if (bookmarkDropdownVisible && els.bmDropdown && !els.bmDropdown.contains(e.target) && e.target !== els.bookmarkBtn && !els.bookmarkBtn.contains(e.target)) {
+          hideBookmarkDropdown();
+        }
       },
     );
 
@@ -625,9 +946,14 @@
       shadow.querySelector(".ft-container"),
       "keydown",
       function (e) {
-        if (e.key === "Escape" && ctxVisible) {
-          hideCtx();
-          e.preventDefault();
+        if (e.key === "Escape") {
+          if (bookmarkDropdownVisible) {
+            hideBookmarkDropdown();
+            e.preventDefault();
+          } else if (ctxVisible) {
+            hideCtx();
+            e.preventDefault();
+          }
         }
         if (e.key === "F2") {
           e.preventDefault();
@@ -653,6 +979,9 @@
     setActivePane("local");
 
     // Initialize
+    loadBookmarks().then(function () {
+      updateBookmarkBtnState();
+    });
     initLocal();
     initRemote();
   });
@@ -790,10 +1119,11 @@
   }
 
   function updateActionButtons() {
-    // Update delete button based on selection in active pane
-    var selection = activePane === "local" ? selectedLocal : selectedRemote;
-    var hasSelection = Object.keys(selection).length > 0;
-    els.deleteBtn.disabled = !hasSelection;
+    // Update per-pane delete buttons
+    var hasLocalSelection = Object.keys(selectedLocal).length > 0;
+    var hasRemoteSelection = Object.keys(selectedRemote).length > 0;
+    if (els.localDelete) els.localDelete.disabled = !hasLocalSelection;
+    if (els.remoteDelete) els.remoteDelete.disabled = !hasRemoteSelection;
   }
 
   // ─── Context Menu ────────────────────────────────────────────────────
@@ -957,6 +1287,7 @@
 
       // Save path for next time
       await saveLocalPath(localPath);
+      updateBookmarkBtnState();
     } catch (e) {
       showLocalError(e.message);
     }
@@ -1247,6 +1578,7 @@
 
       // Save path for next time
       await saveRemotePath(remotePath);
+      updateBookmarkBtnState();
     } catch (e) {
       showRemoteError(e.message);
     }
@@ -2184,8 +2516,9 @@
 
   // ─── File Operations (Add File, Add Folder, Delete) ────────────────
 
-  async function addNewFile() {
-    if (activePane === "remote" && !api.connectionId) {
+  async function addNewFile(pane) {
+    if (!pane) pane = activePane;
+    if (pane === "remote" && !api.connectionId) {
       var toast = api.ui.toast();
       toast.show(
         isFtp() ? "Not connected to FTP server" : "Not connected to SSH server",
@@ -2195,7 +2528,7 @@
     }
 
     var name = await promptUser(
-      activePane === "local"
+      pane === "local"
         ? "Create New File (Local)"
         : "Create New File (Remote)",
       "File name:",
@@ -2203,7 +2536,7 @@
     );
     if (!name) return;
 
-    if (activePane === "local") {
+    if (pane === "local") {
       var targetPath = joinLocalPath(localPath, name);
       try {
         var result = await window.termulAPI.fs.createFile(targetPath);
@@ -2260,8 +2593,9 @@
     }
   }
 
-  async function addNewFolder() {
-    if (activePane === "remote" && !api.connectionId) {
+  async function addNewFolder(pane) {
+    if (!pane) pane = activePane;
+    if (pane === "remote" && !api.connectionId) {
       var toast = api.ui.toast();
       toast.show(
         isFtp() ? "Not connected to FTP server" : "Not connected to SSH server",
@@ -2271,7 +2605,7 @@
     }
 
     var name = await promptUser(
-      activePane === "local"
+      pane === "local"
         ? "Create New Folder (Local)"
         : "Create New Folder (Remote)",
       "Folder name:",
@@ -2279,7 +2613,7 @@
     );
     if (!name) return;
 
-    if (activePane === "local") {
+    if (pane === "local") {
       var targetPath = joinLocalPath(localPath, name);
       try {
         var result = await window.termulAPI.fs.mkdir(targetPath);
@@ -2335,8 +2669,20 @@
     }
   }
 
-  async function deleteSelected() {
-    var items = getSelectedItems();
+  async function deleteSelected(pane) {
+    if (!pane) pane = activePane;
+    var selection = pane === "local" ? selectedLocal : selectedRemote;
+    var entries = pane === "local" ? localEntries : remoteEntries;
+    var items = [];
+    var selNames = Object.keys(selection);
+    for (var i = 0; i < selNames.length; i++) {
+      for (var j = 0; j < entries.length; j++) {
+        if (entries[j].name === selNames[i]) {
+          items.push(entries[j]);
+          break;
+        }
+      }
+    }
     if (items.length === 0) return;
 
     var names = items.map(function (it) {
@@ -2358,8 +2704,7 @@
 
     if (!confirmed) return;
 
-    if (activePane === "local") {
-      // Delete local files/dirs one by one
+    if (pane === "local") {
       for (var i = 0; i < items.length; i++) {
         try {
           var result = await window.termulAPI.fs.deletePath(items[i].path);
